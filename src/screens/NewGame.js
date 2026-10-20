@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, Text } from 'react-native';
-import { C, Btn, T, Card, Row, Chips, Field, H } from '../ui/kit';
+import { C, Btn, T, Card, Row, Chips, Field, H, Icon } from '../ui/kit';
 import { useG } from '../ui/ctx';
 import { LEAGUES } from '../data/leagues';
 import { NATIONS, NATION_BY_CODE, CONF_NAMES } from '../data/nations';
@@ -65,13 +65,21 @@ export default function NewGameScreen({ onBack }) {
       <View style={{ gap: 12 }}>
         <H>Режим карьеры</H>
         {[
-          ['club', '🏟️ Клуб', 'Руководите клубом: состав, тактика, трансферы, финансы, стадион, академия.'],
-          ['nation', '🌍 Сборная', 'Тренируйте сборную: вызовы, отборы, Лига наций, Евро, Кубок мира и другие турниры.'],
-          ['both', '⭐ Клуб + сборная', 'Совмещайте обе должности, как настоящие тренеры-совместители.'],
-        ].map(([k, t, d]) => (
-          <Card key={k} onPress={() => { setMode(k); setStep(1); }}>
-            <T bold size={18}>{t}</T>
-            <T muted style={{ marginTop: 4 }}>{d}</T>
+          ['club', 'business', C.gold, 'Клуб', 'Состав, тактика, трансферы, финансы, стадион и академия.'],
+          ['nation', 'flag', C.blue, 'Сборная', 'Вызовы, отборы, Лига наций, Евро, Кубок мира и другие турниры.'],
+          ['both', 'star', C.accent, 'Клуб + сборная', 'Совмещайте обе должности, как настоящие тренеры-совместители.'],
+        ].map(([k, icon, col, t, d]) => (
+          <Card key={k} onPress={() => { setMode(k); setStep(1); }} style={{ padding: 16 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+              <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: col + '22', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name={icon} size={24} color={col} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <T display size={24}>{t}</T>
+                <T muted size={13} style={{ marginTop: 2, lineHeight: 18 }}>{d}</T>
+              </View>
+              <Icon name="chevron-forward" size={18} color={C.dim} />
+            </View>
           </Card>
         ))}
       </View>
@@ -97,7 +105,7 @@ export default function NewGameScreen({ onBack }) {
     const list = L.clubs.map((c, i) => ({ c, i })).sort((a, b) => b.c[2] - a.c[2]);
     body = (
       <View>
-        <Pressable onPress={() => setLeague(null)}><T color={C.accent} style={{ marginBottom: 8 }}>‹ Другая лига</T></Pressable>
+        <Pressable onPress={() => setLeague(null)}><T color={C.gold} bold style={{ marginBottom: 8 }}>‹ Другая лига</T></Pressable>
         <H>{L.name}</H>
         {list.map(({ c, i }) => (
           <Row key={i} onPress={() => { setClub(i); setStep(needNation ? 2 : 3); }} style={club === i ? { backgroundColor: C.card2 } : null}>
@@ -153,7 +161,7 @@ export default function NewGameScreen({ onBack }) {
             } catch (e) { G.alert('Не удалось загрузить', String(e?.message || e)); }
           }} />
         </Card>
-        <Btn title="Начать карьеру" onPress={start} />
+        <Btn title="НАЧАТЬ КАРЬЕРУ" icon="football" onPress={start} />
       </View>
     );
   }
@@ -161,7 +169,7 @@ export default function NewGameScreen({ onBack }) {
   return (
     <View style={{ flex: 1 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14 }}>
-        <Pressable onPress={back} hitSlop={12}><Text style={{ color: C.accent, fontSize: 16 }}>‹ Назад</Text></Pressable>
+        <Pressable onPress={back} hitSlop={12} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Icon name="chevron-back" size={18} color={C.gold} /><Text style={{ color: C.gold, fontSize: 16, fontWeight: '700' }}>Назад</Text></Pressable>
       </View>
       <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 0, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">{body}</ScrollView>
     </View>

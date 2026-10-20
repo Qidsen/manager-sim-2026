@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
-import { C, T, Seg, Chips, Card, Row, Empty, FormDots, Btn } from '../ui/kit';
+import { C, F, T, Seg, Chips, Card, Row, Empty, FormDots, Btn, Icon } from '../ui/kit';
 import Page from '../ui/page';
 import { useG } from '../ui/ctx';
 import { compGroups, topScorers, scoreText, userTeamIds } from '../engine/query';
@@ -26,22 +26,25 @@ export default function CompsScreen() {
     const st = c.stages[c.stages.length - 1];
     return (
       <Row key={c.id} onPress={() => G.push('comp', { id: c.id })}>
+        <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: (c.done ? C.gold : C.blue) + '1F', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name={c.done ? 'trophy' : c.kind === 'league' ? 'list' : c.scope === 'nat' ? 'flag' : 'git-network'} size={17} color={c.done ? C.gold : C.blue} />
+        </View>
         <View style={{ flex: 1 }}>
           <T bold size={14}>{c.name}</T>
           <T muted size={12}>{c.done ? `Победитель: ${c.winner ? teamName(W, c.winner) : (c.qualified ? `${c.qualified.length} команд прошли` : '—')}` : st?.name}</T>
         </View>
-        <T muted>›</T>
+        <Icon name="chevron-forward" size={16} color={C.dim} />
       </Row>
     );
   };
 
   return (
     <Page title="Турниры" sub={`Сезон ${seasonLabel(W.year)}`}>
-      {my.length ? <Card title="Ваши турниры">{my.map(item)}</Card> : null}
+      {my.length ? <Card title="Ваши турниры" icon="star">{my.map(item)}</Card> : null}
       {ORDER.filter((k) => groups[k]?.length).map((k) => (
-        <Card key={k} title={k}>{groups[k].map(item)}</Card>
+        <Card key={k} title={k} icon={{ 'Чемпионаты': 'list', 'Национальные кубки': 'ribbon', 'Международные клубные': 'globe', 'Сборные': 'flag', 'Товарищеские': 'people' }[k]}>{groups[k].map(item)}</Card>
       ))}
-      <Btn title="История турниров" kind="ghost" onPress={() => G.push('history')} />
+      <Btn title="История турниров" icon="time" kind="ghost" onPress={() => G.push('history')} />
     </Page>
   );
 }

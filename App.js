@@ -3,7 +3,9 @@ import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator, ScrollView
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Ctx } from './src/ui/ctx';
-import { C, Btn } from './src/ui/kit';
+import { C, F, Btn, Icon, tap } from './src/ui/kit';
+import { useFonts } from 'expo-font';
+import { repairSchedule } from './src/engine/sim';
 import { saveGame } from './src/storage';
 import { seed } from './src/engine/rng';
 import TitleScreen from './src/screens/Title';
@@ -24,11 +26,11 @@ import TacticsScreen from './src/screens/Tactics';
 import DatabaseScreen from './src/screens/Database';
 
 const TABS = [
-  { key: 'home', label: 'Главная', icon: '🏠' },
-  { key: 'squad', label: 'Команда', icon: '👕' },
-  { key: 'comps', label: 'Турниры', icon: '🏆' },
-  { key: 'transfers', label: 'Трансферы', icon: '💼' },
-  { key: 'more', label: 'Ещё', icon: '☰' },
+  { key: 'home', label: 'Главная', icon: 'home' },
+  { key: 'squad', label: 'Команда', icon: 'shirt' },
+  { key: 'comps', label: 'Турниры', icon: 'trophy' },
+  { key: 'transfers', label: 'Трансферы', icon: 'swap-horizontal' },
+  { key: 'more', label: 'Ещё', icon: 'grid' },
 ];
 
 const STACK = {
@@ -48,6 +50,11 @@ const STACK = {
 };
 
 export default function App() {
+  const [fontsLoaded, fontError] = useFonts({
+    Oswald_500Medium: require('@expo-google-fonts/oswald/500Medium/Oswald_500Medium.ttf'),
+    Oswald_600SemiBold: require('@expo-google-fonts/oswald/600SemiBold/Oswald_600SemiBold.ttf'),
+    Oswald_700Bold: require('@expo-google-fonts/oswald/700Bold/Oswald_700Bold.ttf'),
+  });
   const [phase, setPhase] = useState('title');
   const [W, setW] = useState(null);
   const [tick, setTick] = useState(0);
@@ -127,6 +134,12 @@ export default function App() {
           world.v = 2;
         }
         seed(world.rng || 1);
+        try {
+          const moved = repairSchedule(world);
+          if (moved) console.log('перенесено матчей', moved);
+        } catch (e) {
+          console.warn(e);
+        }
         setW(world);
         setTab('home');
         setStack([]);
@@ -166,18 +179,25 @@ export default function App() {
         </View>
         {!(top && top.name === 'match') && (
           <View style={s.tabbar}>
-            {TABS.map((t) => (
-              <Pressable key={t.key} style={s.tab} onPress={() => G.setTab(t.key)}>
-                <View style={[s.tabIcon, tab === t.key && !top && { backgroundColor: C.accentDim }]}>
-                  <Text style={{ fontSize: 17, opacity: tab === t.key && !top ? 1 : 0.6 }}>{t.icon}</Text>
-                </View>
-                <Text style={[s.tabText, tab === t.key && !top && { color: C.accent }]}>{t.label}</Text>
-              </Pressable>
-            ))}
+            {TABS.map((t) => {
+              const on = tab === t.key && !top;
+              return (
+                <Pressable key={t.key} style={s.tab} onPress={() => { tap(); G.setTab(t.key); }}>
+                  <View style={[s.tabIcon, on && { backgroundColor: C.goldDim }]}>
+                    <Icon name={on ? t.icon : `${t.icon}-outline`} size={21} color={on ? C.gold : C.muted} />
+                  </View>
+                  <Text style={[s.tabText, on && { color: C.gold }]}>{t.label}</Text>
+                </Pressable>
+              );
+            })}
           </View>
         )}
       </View>
     );
+  }
+
+  if (!fontsLoaded && !fontError) {
+    return <View style={{ flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color={C.gold} /></View>;
   }
 
   return (
@@ -214,7 +234,7 @@ export default function App() {
         <Modal visible={!!busy} transparent animationType="fade">
           <View style={s.modalWrap}>
             <View style={[s.modal, { alignItems: 'center', paddingVertical: 28 }]}>
-              <ActivityIndicator color={C.accent} size="large" />
+              <ActivityIndicator color={C.gold} size="large" />
               <Text style={[s.modalText, { marginTop: 14 }]}>{busy}</Text>
             </View>
           </View>
@@ -225,12 +245,12 @@ export default function App() {
 }
 
 const s = StyleSheet.create({
-  tabbar: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.line, backgroundColor: '#0f1713', paddingTop: 6, paddingBottom: 4 },
-  tab: { flex: 1, alignItems: 'center', gap: 2 },
-  tabIcon: { width: 48, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  tabText: { color: C.muted, fontSize: 10, fontWeight: '600' },
-  modalWrap: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 24 },
-  modal: { backgroundColor: C.card, borderRadius: 18, padding: 18, borderWidth: 1, borderColor: C.line },
-  modalTitle: { color: C.text, fontSize: 18, fontWeight: '800', marginBottom: 8 },
-  modalText: { color: C.text, fontSize: 15, lineHeight: 21 },
+  tabbar: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.line, backgroundColor: '#0B1120', paddingTop: 7, paddingBottom: 3 },
+  tab: { flex: 1, alignItems: 'center', gap: 3 },
+  tabIcon: { width: 54, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  tabText: { color: C.muted, fontSize: 10.5, fontWeight: '700' },
+  modalWrap: { flex: 1, backgroundColor: 'rgba(3,6,14,0.72)', justifyContent: 'center', padding: 22 },
+  modal: { backgroundColor: C.card, borderRadius: 22, padding: 20, borderWidth: 1, borderColor: C.line },
+  modalTitle: { color: C.text, fontSize: 22, fontFamily: F.d8, marginBottom: 8, letterSpacing: 0.3 },
+  modalText: { color: C.text, fontSize: 15, lineHeight: 22 },
 });

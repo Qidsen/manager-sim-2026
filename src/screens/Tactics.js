@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, useWindowDimensions } from 'react-native';
-import { C, T, Seg, Chips, Card, Btn, ratingColor } from '../ui/kit';
+import { C, T, Seg, Chips, Card, Btn, ratingColor, F } from '../ui/kit';
 import Page from '../ui/page';
 import { useG } from '../ui/ctx';
 import PlayerRow from '../ui/playerRow';
@@ -12,7 +12,10 @@ export function Pitch({ W, form, xi, selected, onSlot, width }) {
   const slots = FORMATIONS[form];
   const h = width * 1.15;
   return (
-    <View style={{ width, height: h, backgroundColor: C.pitch, borderRadius: 14, overflow: 'hidden', alignSelf: 'center', borderWidth: 2, borderColor: C.pitchLine }}>
+    <View style={{ width, height: h, backgroundColor: C.pitch, borderRadius: 18, overflow: 'hidden', alignSelf: 'center', borderWidth: 2, borderColor: C.pitchLine }}>
+      {Array.from({ length: 10 }).map((_, i) => (
+        <View key={`s${i}`} style={{ position: 'absolute', left: 0, right: 0, top: (h / 10) * i, height: h / 10, backgroundColor: i % 2 ? C.pitch2 : C.pitch }} />
+      ))}
       <View style={{ position: 'absolute', left: 0, right: 0, top: h / 2, height: 2, backgroundColor: C.pitchLine }} />
       <View style={{ position: 'absolute', left: width / 2 - 40, top: h / 2 - 40, width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: C.pitchLine }} />
       <View style={{ position: 'absolute', left: width * 0.25, width: width * 0.5, bottom: 0, height: h * 0.14, borderWidth: 2, borderColor: C.pitchLine, borderBottomWidth: 0 }} />
@@ -25,10 +28,10 @@ export function Pitch({ W, form, xi, selected, onSlot, width }) {
         const top = (1 - y) * h - 26 - (y < 0.1 ? 12 : 0);
         return (
           <Pressable key={i} onPress={() => onSlot(i)} style={{ position: 'absolute', left, top, width: 68, alignItems: 'center' }}>
-            <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: sel ? C.gold : '#0b2416', borderWidth: 2, borderColor: p ? ratingColor(r) : C.red, alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ color: sel ? '#000' : '#fff', fontWeight: '800', fontSize: 13 }}>{p ? r : '!'}</Text>
+            <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: sel ? C.gold : 'rgba(5,8,15,0.85)', borderWidth: 2.5, borderColor: sel ? '#fff' : p ? ratingColor(r) : C.red, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ color: sel ? '#1A1206' : '#fff', fontFamily: F.d8, fontSize: 18 }}>{p ? r : '!'}</Text>
             </View>
-            <Text numberOfLines={1} style={{ color: '#fff', fontSize: 10, fontWeight: '700', marginTop: 2, textShadowColor: '#000', textShadowRadius: 3 }}>
+            <Text numberOfLines={1} style={{ color: '#fff', fontSize: 12, fontFamily: F.d7, marginTop: 2, textShadowColor: '#000', textShadowRadius: 4 }}>
               {p ? p.n.split(' ').slice(-1)[0] : 'пусто'}
             </Text>
             <Text style={{ color: '#cfe8d6', fontSize: 9 }}>{POS_RU[pos]}{p && p.pos !== pos ? ` (${POS_RU[p.pos]})` : ''}</Text>
@@ -90,7 +93,7 @@ export default function TacticsScreen({ team }) {
         <Btn small title={tac.auto ? '✓ Автосостав включён' : 'Включить автосостав'} kind={tac.auto ? 'primary' : 'ghost'} style={{ flex: 1 }} onPress={() => { tac.auto = !tac.auto; if (tac.auto) { tac.xi = null; tac.bench = null; } G.refresh(); }} />
         <Btn small title="Лучшие 11" kind="ghost" style={{ flex: 1 }} onPress={() => { const a = autoLineup(W, pool, tac.form); commit(a.xi, a.bench); }} />
       </View>
-      <Card title="Установки">
+      <Card title="Установки" icon="options-outline">
         <T muted size={12} style={{ marginBottom: 6 }}>Настрой: {MENTALITY[tac.ment]}</T>
         <Seg options={MENTALITY.map((m, i) => ({ value: i, label: ['−−', '−', '=', '+', '++'][i] }))} value={tac.ment} onChange={(v) => { tac.ment = v; G.refresh(); }} />
         <T muted size={12} style={{ marginVertical: 6 }}>Прессинг</T>
@@ -99,13 +102,13 @@ export default function TacticsScreen({ team }) {
         <Seg options={TEMPO.map((m, i) => ({ value: i, label: m }))} value={tac.tempo} onChange={(v) => { tac.tempo = v; G.refresh(); }} />
         <T muted size={11} style={{ marginTop: 8 }}>Высокий прессинг и быстрый темп сильнее утомляют игроков. Атакующий настрой создаёт больше моментов, но открывает оборону.</T>
       </Card>
-      <Card title="Запасные">
+      <Card title="Запасные" icon="people-outline">
         {lu.bench.map((id) => (
           <PlayerRow key={id} p={W.players[id]} onPress={() => onBench(id)} selected={false} />
         ))}
       </Card>
       {others.length ? (
-        <Card title="Вне заявки">
+        <Card title="Вне заявки" icon="person-remove-outline">
           {others.map((p) => (
             <PlayerRow key={p.id} p={p} onPress={() => (p.inj > 0 || p.ban > 0 ? G.push('player', { id: p.id }) : onBench(p.id))} />
           ))}

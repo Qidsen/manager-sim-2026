@@ -207,8 +207,44 @@ function playDayMatches(W) {
   }
 }
 
+// ================= перенос матчей =================
+// Матчи, которые по какой-то причине не сыграли в свой день, переносятся на ближайший день.
+// Матч без соперника засчитывается технической победой.
+export function repairSchedule(W, userShift = 0) {
+  let moved = 0;
+  for (const cid in W.comps) {
+    const comp = W.comps[cid];
+    comp.stages.forEach((st, si) => {
+      st.rounds.forEach((r, ri) => {
+        for (const m of r) {
+          if (m.hg !== null) continue;
+          if (!m.h || !m.a) {
+            if (cid === 'FR') { m.hg = 0; m.ag = 0; m.gl = []; continue; }
+            const res = { hg: m.h ? 3 : 0, ag: m.a ? 3 : 0, gl: [] };
+            if (!m.h && !m.a) res.ag = 0;
+            recordResult(W, comp, si, m, res);
+            moved++;
+            continue;
+          }
+          if (m.day < W.day) {
+            const isUser = isUserTeam(W, m.h) || isUserTeam(W, m.a);
+            const nd = W.day + (isUser ? userShift : 0);
+            m.day = nd;
+            const list = (W.sched[nd] ||= []);
+            if (!list.some((e) => e.c === cid && e.s === si && e.r === ri)) list.push({ c: cid, s: si, r: ri });
+            if (isUser) mail(W, 'Матч перенесён', `Матч ${teamName(W, m.h)} — ${teamName(W, m.a)} (${comp.name}) перенесён на ${fmtDate(W.year, nd)}.`);
+            moved++;
+          }
+        }
+      });
+    });
+  }
+  return moved;
+}
+
 // ================= день =================
 export function processDay(W) {
+  if (W.day % 7 === 3) repairSchedule(W, 1);
   // вызовы в сборные перед окном
   if (INTL_DAYS.includes(W.day + 1) || W.day + 1 === SUMMER_DAYS[0]) nationCallups(W);
   if (W.day === 343) {

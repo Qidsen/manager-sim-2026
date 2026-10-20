@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View } from 'react-native';
-import { C, T, Seg, Card, Btn, Empty } from '../ui/kit';
+import { C, T, Seg, Card, Btn, Empty, SectionLabel } from '../ui/kit';
 import Page from '../ui/page';
 import { useG } from '../ui/ctx';
 import PlayerRow from '../ui/playerRow';
@@ -34,17 +34,15 @@ export default function SquadScreen() {
     <Page title={teamName(W, cur)} sub={isClub ? `${list.length} игроков · зарплаты ${money(wages)}/нед.` : `${list.length} вызванных игроков`}>
       {teams.length > 1 ? <Seg options={teams} value={cur} onChange={setTeam} style={{ marginBottom: 10 }} /> : null}
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
-        <Btn title="Тактика и состав" small style={{ flex: 1 }} onPress={() => G.push('tactics', { team: cur })} />
-        {!isClub ? <Btn title="Вызов" small kind="ghost" style={{ flex: 1 }} onPress={() => G.push('callup')} /> : null}
+        <Btn title="Тактика и состав" icon="clipboard" small style={{ flex: 1 }} onPress={() => G.push('tactics', { team: cur })} />
+        {!isClub ? <Btn title="Вызов" icon="person-add" small kind="ghost" style={{ flex: 1 }} onPress={() => G.push('callup')} /> : null}
       </View>
       <Seg options={[{ value: 'squad', label: 'Состав' }, { value: 'stats', label: 'Статистика' }, { value: 'money', label: 'Контракты' }]} value={seg} onChange={setSeg} style={{ marginBottom: 6 }} />
-      <T muted size={12} style={{ marginVertical: 6 }}>Средний рейтинг: {avg}</T>
+      <T muted size={12} style={{ marginTop: 8 }}>Средний рейтинг состава: <T bold size={12}>{avg}</T></T>
       {list.map((p, idx) => {
         const line = LINE[p.pos];
         const head = idx === 0 || LINE[list[idx - 1].pos] !== line ? (
-          <T key={`h${line}`} muted bold size={11} style={{ marginTop: 14, marginBottom: 2, letterSpacing: 1 }}>
-            {{ G: 'ВРАТАРИ', D: 'ЗАЩИТНИКИ', M: 'ПОЛУЗАЩИТНИКИ', A: 'НАПАДАЮЩИЕ' }[line]}
-          </T>
+          <SectionLabel key={`h${line}`}>{{ G: 'Вратари', D: 'Защитники', M: 'Полузащитники', A: 'Нападающие' }[line]}</SectionLabel>
         ) : null;
         let right = null;
         if (seg === 'stats') {

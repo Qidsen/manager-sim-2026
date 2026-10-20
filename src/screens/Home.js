@@ -1,6 +1,7 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { C, Btn, T, Card, Bar, FormDots, ratingColor } from '../ui/kit';
+import { LinearGradient } from 'expo-linear-gradient';
+import { C, F, Btn, T, Card, Bar, FormDots, Icon, IconBtn, More, tap, thud } from '../ui/kit';
 import { useG } from '../ui/ctx';
 import { advance } from '../engine/sim';
 import { fmtDate, fmtShort, money, seasonLabel } from '../engine/util';
@@ -13,6 +14,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Время идёт порциями по несколько дней, чтобы экран не замирал
 export async function continueGame(G) {
+  thud();
   const W = G.W;
   const u = W.user;
   let r = { kind: 'idle' };
@@ -62,73 +64,82 @@ export default function HomeScreen() {
   const next = nextUserFixture(W);
   const unread = W.inbox.filter((m) => !m.read).length;
   const pos = club ? clubLeaguePos(W, club.id) : null;
-  const accent = club ? club.color : C.accent;
+  const tint = club ? club.color : '#4C8DFF';
   const today = next && next.day === W.day;
+  const daysTo = next ? next.day - W.day : null;
 
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 110 }}>
-        {/* шапка */}
-        <View style={[s.hero, { borderBottomColor: accent }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
+        {/* шапка в цветах клуба */}
+        <LinearGradient colors={[tint + '66', tint + '14', C.bg]} locations={[0, 0.55, 1]} style={s.hero}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
             <View style={{ flex: 1 }}>
-              <T muted size={12}>{fmtDate(W.year, W.day, true)} · сезон {seasonLabel(W.year)}</T>
-              <Text style={s.heroTitle} numberOfLines={1}>{club ? club.name : nat ? `Сборная: ${nat.name}` : 'Без работы'}</Text>
-              <T muted size={13}>{u.name}{club && nat ? ` · сборная ${nat.flag}` : ''}</T>
+              <Text style={s.date}>{fmtDate(W.year, W.day, true).toUpperCase()} · {seasonLabel(W.year)}</Text>
+              <Text style={s.heroTitle} numberOfLines={1}>{club ? club.name : nat ? nat.name : 'Без работы'}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                <Icon name="person-circle-outline" size={15} color={C.muted} />
+                <T muted size={13}>{u.name}{club && nat ? `  ·  ${nat.flag} ${nat.name}` : ''}</T>
+              </View>
             </View>
-            <Pressable onPress={() => G.push('inbox')} hitSlop={10} style={s.mailBtn}>
-              <Text style={{ fontSize: 20 }}>✉️</Text>
-              {unread ? (
-                <View style={s.mailDot}><Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{unread}</Text></View>
-              ) : null}
-            </Pressable>
+            <IconBtn name="mail" onPress={() => G.push('inbox')} badge={unread} />
           </View>
-          {isWindow(W.day) ? <View style={s.windowPill}><Text style={{ color: C.accent, fontSize: 11, fontWeight: '700' }}>ТРАНСФЕРНОЕ ОКНО ОТКРЫТО</Text></View> : null}
-        </View>
+          {isWindow(W.day) ? (
+            <View style={s.window}>
+              <Icon name="swap-horizontal" size={12} color={C.gold} />
+              <Text style={s.windowText}>ТРАНСФЕРНОЕ ОКНО ОТКРЫТО</Text>
+            </View>
+          ) : null}
+        </LinearGradient>
 
-        <View style={{ padding: 14 }}>
-          {/* ближайший матч */}
+        <View style={{ paddingHorizontal: 14 }}>
+          {/* матчдэй */}
           {next ? (
-            <Pressable onPress={() => (today ? G.push('match') : G.push('team', { id: next.m.h === next.team ? next.m.a : next.m.h }))}>
-              <View style={[s.matchCard, today && { borderColor: C.gold }]}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <T muted size={12} numberOfLines={1} style={{ flex: 1 }}>
-                    {next.comp.kind === 'friendly' ? next.m.label || 'Товарищеский матч' : next.comp.kind === 'league' ? `${next.comp.name} · ${next.ri + 1}-й тур` : `${next.comp.name} · ${next.stage.name}`}
-                  </T>
-                  <T size={12} bold color={today ? C.gold : C.muted}>{today ? 'СЕГОДНЯ' : fmtShort(W.year, next.day)}</T>
+            <Pressable onPress={() => { tap(); today ? G.push('match') : G.push('team', { id: next.m.h === next.team ? next.m.a : next.m.h }); }}>
+              <LinearGradient colors={today ? ['#3A2A0E', C.card] : [C.card2, C.card]} style={[s.matchCard, today && { borderColor: C.gold + '99' }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
+                  <Icon name="trophy-outline" size={13} color={C.muted} />
+                  <Text style={s.compLine} numberOfLines={1}>
+                    {(next.comp.kind === 'friendly' ? next.m.label || 'Товарищеский матч' : next.comp.kind === 'league' ? `${next.comp.name} · ${next.ri + 1}-й тур` : `${next.comp.name} · ${next.stage.name}`).toUpperCase()}
+                  </Text>
+                  <View style={[s.when, today && { backgroundColor: C.gold }]}>
+                    <Text style={[s.whenText, today && { color: '#1A1206' }]}>{today ? 'СЕГОДНЯ' : daysTo === 1 ? 'ЗАВТРА' : fmtShort(W.year, next.day).toUpperCase()}</Text>
+                  </View>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <TeamBlock W={W} id={next.m.h} me={next.m.h === next.team} />
-                  <Text style={{ color: C.dim, fontSize: 15, fontWeight: '800', marginHorizontal: 6 }}>VS</Text>
+                  <View style={{ alignItems: 'center', width: 54 }}>
+                    <Text style={s.vs}>VS</Text>
+                    <T muted size={10}>{next.m.h === next.team ? 'дома' : 'в гостях'}</T>
+                  </View>
                   <TeamBlock W={W} id={next.m.a} me={next.m.a === next.team} />
                 </View>
-              </View>
+              </LinearGradient>
             </Pressable>
           ) : (
             <Card><T muted center>{u.club || u.nation ? 'Ближайших матчей нет — жмите «Продолжить».' : 'Вы без работы. Предложения — в разделе «Карьера».'}</T></Card>
           )}
 
-          {/* быстрые показатели */}
+          {/* ключевые цифры */}
           <View style={s.tiles}>
-            {club ? <Tile label="Баланс" value={money(club.balance)} color={club.balance < 0 ? C.red : C.text} onPress={() => G.push('club')} /> : null}
-            {pos ? <Tile label={`Место${u.target ? ` · цель ${u.target}` : ''}`} value={`${pos.pos} из ${pos.total}`} color={u.target && pos.pos <= u.target ? C.accent : C.orange} onPress={() => G.push('comp', { id: `L:${club.league}` })} /> : null}
-            {club ? <Tile label="Руководство" value={`${Math.round(u.conf)}%`} color={u.conf < 30 ? C.red : u.conf < 55 ? C.orange : C.accent} bar={u.conf} /> : null}
-            {nat ? <Tile label="Федерация" value={`${Math.round(u.natConf)}%`} color={u.natConf < 30 ? C.red : C.accent} bar={u.natConf} onPress={() => G.push('nation')} /> : null}
+            {club ? <Tile icon="wallet" label="Бюджет" value={money(club.balance)} color={club.balance < 0 ? C.red : C.text} onPress={() => G.push('club')} /> : null}
+            {pos ? <Tile icon="podium" label={u.target ? `Место · цель ${u.target}` : 'Место'} value={`${pos.pos}`} suffix={` из ${pos.total}`} color={u.target && pos.pos <= u.target ? C.accent : C.orange} onPress={() => G.push('comp', { id: `L:${club.league}` })} /> : null}
+            {club ? <Tile icon="business" label="Руководство" value={`${Math.round(u.conf)}%`} color={u.conf < 30 ? C.red : u.conf < 55 ? C.orange : C.accent} bar={u.conf} /> : null}
+            {nat ? <Tile icon="flag" label="Федерация" value={`${Math.round(u.natConf)}%`} color={u.natConf < 30 ? C.red : C.accent} bar={u.natConf} onPress={() => G.push('nation')} /> : null}
           </View>
 
           {pos ? (
-            <Card title="Турнирная таблица" onPress={() => G.push('comp', { id: `L:${club.league}` })} right={<T muted size={12}>Вся ›</T>}>
+            <Card title="Турнирная таблица" icon="list" onPress={() => G.push('comp', { id: `L:${club.league}` })} right={<More text="Вся" />}>
               {(() => {
                 const from = Math.max(0, Math.min(pos.pos - 3, pos.total - 5));
                 return pos.table.slice(from, from + 5).map((r, k) => {
                   const me = r.id === club.id;
                   return (
-                    <View key={r.id} style={[s.tblRow, me && { backgroundColor: C.accentDim }]}>
-                      <T muted size={13} style={{ width: 24, textAlign: 'center' }}>{from + k + 1}</T>
+                    <View key={r.id} style={[s.tblRow, me && { backgroundColor: C.goldDim }]}>
+                      <Text style={[s.tblPos, me && { color: C.gold }]}>{from + k + 1}</Text>
                       <T size={14} bold={me} style={{ flex: 1 }} numberOfLines={1}>{teamName(W, r.id)}</T>
-                      <FormDots form={r.form} />
-                      <T muted size={12} style={{ width: 26, textAlign: 'right' }}>{r.p}</T>
-                      <T bold size={14} style={{ width: 30, textAlign: 'right' }}>{r.pts}</T>
+                      <FormDots form={r.form.slice(-4)} />
+                      <Text style={s.tblPts}>{r.pts}</Text>
                     </View>
                   );
                 });
@@ -140,17 +151,21 @@ export default function HomeScreen() {
             const res = lastResults(W, tid, 5);
             if (!res.length) return null;
             return (
-              <Card key={tid} title={isNat(tid) ? 'Последние матчи сборной' : 'Последние матчи'}>
-                {res.map(({ m }, i) => {
+              <Card key={tid} title={isNat(tid) ? 'Сборная: последние матчи' : 'Последние матчи'} icon="time-outline">
+                {res.map(({ m, comp }, i) => {
                   const L = resultLetter(m, tid);
-                  const col = L === 'W' ? C.accent : L === 'L' ? C.red : C.muted;
+                  const col = L === 'W' ? C.accent : L === 'L' ? C.red : C.dim;
+                  const home = m.h === tid;
                   return (
                     <View key={i} style={s.resRow}>
                       <View style={[s.resBadge, { backgroundColor: col }]}>
-                        <Text style={{ color: '#06210f', fontSize: 11, fontWeight: '900' }}>{L === 'W' ? 'В' : L === 'L' ? 'П' : 'Н'}</Text>
+                        <Text style={s.resLetter}>{L === 'W' ? 'В' : L === 'L' ? 'П' : 'Н'}</Text>
                       </View>
-                      <T size={13} style={{ flex: 1 }} numberOfLines={1}>{teamName(W, m.h)} — {teamName(W, m.a)}</T>
-                      <T bold size={13}>{scoreText(m)}</T>
+                      <View style={{ flex: 1 }}>
+                        <T size={14} numberOfLines={1}>{home ? '' : '@ '}{teamName(W, home ? m.a : m.h)}</T>
+                        <T muted size={11} numberOfLines={1}>{comp.kind === 'friendly' ? 'Товарищеский' : comp.name}</T>
+                      </View>
+                      <Text style={s.score}>{scoreText(m)}</Text>
                     </View>
                   );
                 })}
@@ -158,57 +173,73 @@ export default function HomeScreen() {
             );
           })}
 
-          <Card title="Новости" onPress={() => G.push('news')} right={<T muted size={12}>Все ›</T>}>
+          <Card title="Новости" icon="newspaper-outline" onPress={() => G.push('news')} right={<More />}>
             {W.news.slice(0, 4).map((n, i) => (
-              <T key={i} size={13} style={{ paddingVertical: 5, lineHeight: 18 }} numberOfLines={2}>{n.text}</T>
+              <View key={i} style={{ flexDirection: 'row', gap: 10, paddingVertical: 6 }}>
+                <View style={{ width: 3, borderRadius: 2, backgroundColor: C.gold, opacity: 0.6 }} />
+                <T size={13} style={{ flex: 1, lineHeight: 18 }} numberOfLines={2}>{n.text}</T>
+              </View>
             ))}
             {!W.news.length ? <T muted size={13}>Пока тихо.</T> : null}
           </Card>
         </View>
       </ScrollView>
 
-      {/* кнопка всегда под рукой */}
       <View style={s.cta}>
-        <Btn title={today ? '⚽  К матчу' : 'Продолжить  ▶'} kind={today ? 'gold' : 'primary'} onPress={() => (today ? G.push('match') : continueGame(G))} style={{ paddingVertical: 16 }} />
+        <Btn title={today ? 'К МАТЧУ' : 'ПРОДОЛЖИТЬ'} icon={today ? 'football' : 'play'} onPress={() => (today ? G.push('match') : continueGame(G))} />
       </View>
     </View>
   );
 }
 
-function Tile({ label, value, color, bar, onPress }) {
+function Tile({ icon, label, value, suffix, color, bar, onPress }) {
   const body = (
     <View style={s.tile}>
-      <T muted size={11} numberOfLines={1}>{label}</T>
-      <T bold size={17} color={color} numberOfLines={1} style={{ marginTop: 4 }}>{value}</T>
-      {bar !== undefined ? <Bar value={bar} color={color} height={4} style={{ marginTop: 8 }} /> : null}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+        <Icon name={icon} size={13} color={C.muted} />
+        <T muted size={11} numberOfLines={1} style={{ flex: 1 }}>{label}</T>
+        {onPress ? <Icon name="chevron-forward" size={12} color={C.dim} /> : null}
+      </View>
+      <Text style={[s.tileVal, { color }]} numberOfLines={1}>{value}{suffix ? <Text style={{ color: C.muted, fontSize: 16 }}>{suffix}</Text> : null}</Text>
+      {bar !== undefined ? <Bar value={bar} color={color} height={4} style={{ marginTop: 6 }} /> : null}
     </View>
   );
-  return onPress ? <Pressable style={{ flexBasis: '47%', flexGrow: 1 }} onPress={onPress}>{body}</Pressable> : <View style={{ flexBasis: '47%', flexGrow: 1 }}>{body}</View>;
+  return onPress ? <Pressable style={{ flexBasis: '47%', flexGrow: 1 }} onPress={() => { tap(); onPress(); }}>{body}</Pressable> : <View style={{ flexBasis: '47%', flexGrow: 1 }}>{body}</View>;
 }
 
 function TeamBlock({ W, id, me }) {
   return (
     <View style={{ flex: 1, alignItems: 'center' }}>
-      <View style={[s.flagCircle, { borderColor: me ? C.accent : teamColor(W, id) }]}>
-        <Text style={{ fontSize: 26 }}>{teamFlag(W, id)}</Text>
+      <View style={[s.flagRing, { borderColor: me ? C.gold : teamColor(W, id) }]}>
+        <Text style={{ fontSize: 30 }}>{teamFlag(W, id)}</Text>
       </View>
-      <T bold center size={15} numberOfLines={2} style={{ marginTop: 8 }} color={me ? C.accent : C.text}>{teamName(W, id)}</T>
+      <Text style={[s.teamName, me && { color: C.gold }]} numberOfLines={2}>{teamName(W, id)}</Text>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  hero: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 14, backgroundColor: '#111a15', borderBottomWidth: 3 },
-  heroTitle: { color: C.text, fontSize: 26, fontWeight: '900', marginVertical: 2 },
-  mailBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.card2, alignItems: 'center', justifyContent: 'center' },
-  mailDot: { position: 'absolute', right: -2, top: -2, backgroundColor: C.red, borderRadius: 9, minWidth: 18, height: 18, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
-  windowPill: { alignSelf: 'flex-start', marginTop: 10, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: C.accentDim },
-  matchCard: { backgroundColor: C.card, borderRadius: 18, padding: 16, marginBottom: 12, borderWidth: 1.5, borderColor: C.line },
-  flagCircle: { width: 58, height: 58, borderRadius: 29, borderWidth: 2, alignItems: 'center', justifyContent: 'center', backgroundColor: C.card2 },
+  hero: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 22 },
+  date: { color: C.muted, fontSize: 12, fontFamily: F.d7, letterSpacing: 1.3 },
+  heroTitle: { color: C.text, fontSize: 34, fontFamily: F.d8, marginTop: 2, letterSpacing: 0.3 },
+  window: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 12, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 7, backgroundColor: C.goldDim, borderWidth: 1, borderColor: C.gold + '44' },
+  windowText: { color: C.gold, fontSize: 12, fontFamily: F.d7, letterSpacing: 1 },
+  matchCard: { borderRadius: 22, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: C.line },
+  compLine: { color: C.muted, fontSize: 12, fontFamily: F.d7, letterSpacing: 1, flex: 1, marginLeft: 6 },
+  when: { backgroundColor: C.card3, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  whenText: { color: C.text, fontSize: 12, fontFamily: F.d8, letterSpacing: 0.8 },
+  vs: { color: C.dim, fontSize: 24, fontFamily: F.d8 },
+  flagRing: { width: 68, height: 68, borderRadius: 34, borderWidth: 2.5, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bg2 },
+  teamName: { color: C.text, fontSize: 17, fontFamily: F.d7, textAlign: 'center', marginTop: 8 },
   tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
-  tile: { backgroundColor: C.card, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: C.line },
-  tblRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 7, gap: 8, borderRadius: 8 },
-  resRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 10 },
-  resBadge: { width: 22, height: 22, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
-  cta: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 12, paddingBottom: 10, backgroundColor: 'rgba(12,18,15,0.94)', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.line },
+  tile: { backgroundColor: C.card, borderRadius: 16, padding: 12, borderWidth: 1, borderColor: C.line },
+  tileVal: { fontSize: 25, fontFamily: F.d8, marginTop: 2 },
+  tblRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 7, paddingHorizontal: 6, gap: 10, borderRadius: 9 },
+  tblPos: { color: C.muted, width: 20, textAlign: 'center', fontFamily: F.d7, fontSize: 16 },
+  tblPts: { color: C.text, width: 30, textAlign: 'right', fontFamily: F.d8, fontSize: 18 },
+  resRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 7, gap: 12 },
+  resBadge: { width: 26, height: 26, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
+  resLetter: { color: '#0A0F1C', fontSize: 14, fontFamily: F.d8 },
+  score: { color: C.text, fontSize: 20, fontFamily: F.d8, fontVariant: ['tabular-nums'] },
+  cta: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10, backgroundColor: 'rgba(10,15,28,0.94)', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.line },
 });

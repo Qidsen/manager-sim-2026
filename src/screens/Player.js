@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text } from 'react-native';
-import { C, T, Card, Btn, Bar, Rating, Field, Seg, Stat, Badge, ratingColor } from '../ui/kit';
+import { View, Text, StyleSheet } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { C, F, T, Card, Btn, Bar, Rating, Field, Seg, Stat, Badge, ratingColor } from '../ui/kit';
 import Page from '../ui/page';
 import { useG } from '../ui/ctx';
-import { POS_FULL, ATTRS, ATTR_RU, money, playerValue, clamp } from '../engine/util';
+import { POS_FULL, POS_RU, ATTRS, ATTR_RU, money, playerValue, clamp } from '../engine/util';
 import { NATION_BY_CODE } from '../data/nations';
 import { makeBid, requestLoan, quickSell, releasePlayer, renewContract, renewDemand, talkToPlayer, wageDemand, askingPrice, promoteYouth, releaseYouth } from '../engine/sim';
 import { playerAvgRating } from '../engine/query';
@@ -33,44 +34,54 @@ export default function PlayerScreen({ id }) {
   };
 
   return (
-    <Page title={p.n} sub={`${nation?.flag || ''} ${nation?.name || p.nat} · ${POS_FULL[p.pos]} · ${p.age} лет`} back>
-      <Card>
+    <Page title={p.n} sub={`${POS_FULL[p.pos]} · ${p.age} лет`} back>
+      <LinearGradient colors={[(club?.color || '#4C8DFF') + '40', C.card]} style={ps.hero}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-          <Rating v={p.ovr} size="lg" />
+          <View style={[ps.ovrBox, { borderColor: ratingColor(p.ovr) }]}>
+            <Text style={[ps.ovr, { color: ratingColor(p.ovr) }]}>{p.ovr}</Text>
+            <Text style={ps.ovrLbl}>{POS_RU[p.pos]}</Text>
+          </View>
           <View style={{ flex: 1 }}>
-            <T muted size={12}>Потенциал</T>
-            <T bold size={16} color={ratingColor(p.pot)}>{potLo === potHi ? potLo : `${potLo}–${potHi}`}</T>
-          </View>
-          <View style={{ alignItems: 'flex-end' }}>
-            <T muted size={12}>Стоимость</T>
-            <T bold size={16}>{money(playerValue(p))}</T>
+            <Text style={ps.nat}>{nation?.flag || ''} {(nation?.name || p.nat).toUpperCase()}</Text>
+            <T display size={22} numberOfLines={1}>{club ? club.name : p.fa ? 'Свободный агент' : p.aca ? 'Академия' : 'Внутренний чемпионат'}</T>
+            {p.loan ? <T muted size={12}>аренда из «{W.clubs[p.loan.from]?.name || '—'}»</T> : null}
           </View>
         </View>
-        <View style={{ marginTop: 12, gap: 4 }}>
-          <T size={13}>Клуб: <T bold size={13}>{club ? club.name : p.fa ? 'свободный агент' : p.aca ? 'академия' : 'внутренний чемпионат'}</T>{p.loan ? ` (аренда из «${W.clubs[p.loan.from]?.name || '—'}»)` : ''}</T>
-          {club || p.fa ? <T size={13}>Зарплата: {money(p.wage)}/нед.{club ? ` · контракт до лета ${p.contract + 1}` : ''}</T> : null}
-          {p.inj > 0 ? <T size={13} color={C.red}>🚑 Травма: ещё ~{Math.ceil(p.inj / 7)} нед.</T> : null}
-          {p.ban > 0 ? <T size={13} color={C.red}>🟥 Дисквалификация: {p.ban} матч(а)</T> : null}
+        <View style={ps.facts}>
+          <Fact label="Потенциал" value={potLo === potHi ? `${potLo}` : `${potLo}–${potHi}`} color={ratingColor(p.pot)} />
+          <Fact label="Стоимость" value={money(playerValue(p))} />
+          {club || p.fa ? <Fact label="Зарплата/нед" value={money(p.wage)} /> : null}
+          {club ? <Fact label="Контракт" value={`до ${p.contract + 1}`} /> : null}
         </View>
-        <View style={{ marginTop: 12 }}>
-          <T muted size={12}>Физическая готовность {Math.round(p.fit)}%</T>
-          <Bar value={p.fit} color={p.fit < 70 ? C.orange : C.accent} style={{ marginTop: 3 }} />
-          <T muted size={12} style={{ marginTop: 8 }}>Моральный дух {Math.round(p.mor)}%</T>
-          <Bar value={p.mor} color={p.mor < 40 ? C.red : p.mor < 60 ? C.orange : C.blue} style={{ marginTop: 3 }} />
+        {p.inj > 0 || p.ban > 0 ? (
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+            {p.inj > 0 ? <Badge icon="medkit" text={`ТРАВМА · ~${Math.ceil(p.inj / 7)} НЕД.`} color={C.red} /> : null}
+            {p.ban > 0 ? <Badge icon="square" text={`ДИСКВАЛИФИКАЦИЯ · ${p.ban}`} color={C.red} /> : null}
+          </View>
+        ) : null}
+        <View style={{ flexDirection: 'row', gap: 14, marginTop: 14 }}>
+          <View style={{ flex: 1 }}>
+            <T muted size={11}>Готовность {Math.round(p.fit)}%</T>
+            <Bar value={p.fit} color={p.fit < 70 ? C.orange : C.accent} height={6} style={{ marginTop: 4 }} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <T muted size={11}>Мораль {Math.round(p.mor)}%</T>
+            <Bar value={p.mor} color={p.mor < 40 ? C.red : p.mor < 60 ? C.orange : C.blue} height={6} style={{ marginTop: 4 }} />
+          </View>
         </View>
-      </Card>
+      </LinearGradient>
 
-      <Card title="Навыки">
+      <Card title="Навыки" icon="analytics-outline">
         {ATTRS.filter((k) => (p.pos === 'GK' ? true : k !== 'gk')).map((k) => (
-          <View key={k} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 7 }}>
-            <T size={13} style={{ width: 92 }}>{ATTR_RU[k]}</T>
-            <Bar value={p.a[k]} color={ratingColor(p.a[k])} height={7} style={{ flex: 1 }} />
-            <T bold size={13} style={{ width: 26, textAlign: 'right' }}>{Math.round(p.a[k])}</T>
+          <View key={k} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 9 }}>
+            <T size={13} style={{ width: 92 }} muted>{ATTR_RU[k]}</T>
+            <Bar value={p.a[k]} color={ratingColor(p.a[k])} height={8} style={{ flex: 1 }} />
+            <Text style={{ width: 28, textAlign: 'right', color: ratingColor(p.a[k]), fontFamily: F.d8, fontSize: 17 }}>{Math.round(p.a[k])}</Text>
           </View>
         ))}
       </Card>
 
-      <Card title="Статистика">
+      <Card title="Статистика" icon="stats-chart-outline">
         <View style={{ flexDirection: 'row' }}>
           <Stat label="Матчи" value={p.st.app} />
           <Stat label="Голы" value={p.st.g} />
@@ -169,3 +180,24 @@ function BidForm({ W, p, my, onDone }) {
     </Card>
   );
 }
+
+function Fact({ label, value, color }) {
+  return (
+    <View style={ps.fact}>
+      <Text style={[ps.factVal, color && { color }]} numberOfLines={1}>{value}</Text>
+      <Text style={ps.factLbl}>{label}</Text>
+    </View>
+  );
+}
+
+const ps = StyleSheet.create({
+  hero: { borderRadius: 20, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: C.line },
+  ovrBox: { width: 76, height: 84, borderRadius: 16, borderWidth: 2, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bg2 },
+  ovr: { fontFamily: F.d8, fontSize: 40 },
+  ovrLbl: { color: C.muted, fontFamily: F.d7, fontSize: 14, letterSpacing: 1 },
+  nat: { color: C.muted, fontFamily: F.d7, fontSize: 13, letterSpacing: 1 },
+  facts: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
+  fact: { flexGrow: 1, flexBasis: '45%', backgroundColor: 'rgba(5,8,15,0.5)', borderRadius: 12, paddingVertical: 8, paddingHorizontal: 8, alignItems: 'center' },
+  factVal: { color: C.text, fontFamily: F.d8, fontSize: 18 },
+  factLbl: { color: C.muted, fontSize: 10, marginTop: 1 },
+});
