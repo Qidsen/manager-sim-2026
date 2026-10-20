@@ -141,6 +141,27 @@ function checkStageDone(W, comp, stageIdx) {
   const stage = comp.stages[stageIdx];
   if (stage.finished || !stageDone(stage)) return;
   stage.finished = true;
+  try {
+    advanceStage(W, comp, stageIdx, stage);
+  } catch (e) {
+    // не оставляем турнир в подвешенном состоянии: попробуем ещё раз при следующей проверке календаря
+    stage.finished = false;
+    throw e;
+  }
+}
+
+// Турнир, у которого последняя стадия доиграна, но следующая так и не создана
+export function healComp(W, comp) {
+  if (comp.done || comp.kind === 'friendly' || !comp.stages.length) return false;
+  const i = comp.stages.length - 1;
+  const st = comp.stages[i];
+  if (!stageDone(st)) return false;
+  st.finished = false;
+  checkStageDone(W, comp, i);
+  return true;
+}
+
+function advanceStage(W, comp, stageIdx, stage) {
   if (stage.t === 'ko') for (const t of stage.ties) t.w = tieWinner(t);
   const next = comp.plan[stageIdx + 1];
   if (!next) {

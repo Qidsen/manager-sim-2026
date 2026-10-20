@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator, ScrollView, Platform, AppState } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ActivityIndicator, ScrollView, Platform, AppState } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Ctx } from './src/ui/ctx';
 import { C, F, Btn, Icon, tap } from './src/ui/kit';
 import { useFonts } from 'expo-font';
 import { repairSchedule } from './src/engine/sim';
+import { logError } from './src/diag';
+import DiagScreen from './src/screens/Diag';
 import { saveGame } from './src/storage';
 import { seed } from './src/engine/rng';
 import TitleScreen from './src/screens/Title';
@@ -47,6 +49,7 @@ const STACK = {
   history: HistoryScreen,
   tactics: TacticsScreen,
   database: DatabaseScreen,
+  diag: DiagScreen,
 };
 
 export default function App() {
@@ -139,6 +142,7 @@ export default function App() {
           if (moved) console.log('перенесено матчей', moved);
         } catch (e) {
           console.warn(e);
+          logError(world, 'repair', e);
         }
         setW(world);
         setTab('home');
@@ -207,16 +211,25 @@ export default function App() {
           <StatusBar style="light" />
           {content}
         </SafeAreaView>
-        <Modal visible={!!dialog} transparent animationType="fade" onRequestClose={() => setDialog(null)}>
-          <View style={s.modalWrap}>
+        {/* Окна поверх экрана — обычные слои, без системных Modal (на iOS два Modal подряд могут заблокировать экран) */}
+        {busy ? (
+          <View style={[StyleSheet.absoluteFill, s.modalWrap, { zIndex: 50 }]} pointerEvents="auto">
+            <View style={[s.modal, { alignItems: 'center', paddingVertical: 28 }]}>
+              <ActivityIndicator color={C.gold} size="large" />
+              <Text style={[s.modalText, { marginTop: 14 }]}>{busy}</Text>
+            </View>
+          </View>
+        ) : null}
+        {dialog && !busy ? (
+          <View style={[StyleSheet.absoluteFill, s.modalWrap, { zIndex: 40 }]}>
             <View style={s.modal}>
-              {dialog?.title ? <Text style={s.modalTitle}>{dialog.title}</Text> : null}
+              {dialog.title ? <Text style={s.modalTitle}>{dialog.title}</Text> : null}
               <ScrollView style={{ maxHeight: 380 }}>
-                {dialog?.text ? <Text style={s.modalText}>{dialog.text}</Text> : null}
-                {dialog?.body || null}
+                {dialog.text ? <Text style={s.modalText}>{dialog.text}</Text> : null}
+                {dialog.body || null}
               </ScrollView>
               <View style={{ gap: 8, marginTop: 14 }}>
-                {(dialog?.buttons || [{ title: 'ОК' }]).map((b, i) => (
+                {(dialog.buttons || [{ title: 'ОК' }]).map((b, i) => (
                   <Btn
                     key={i}
                     title={b.title}
@@ -230,15 +243,7 @@ export default function App() {
               </View>
             </View>
           </View>
-        </Modal>
-        <Modal visible={!!busy} transparent animationType="fade">
-          <View style={s.modalWrap}>
-            <View style={[s.modal, { alignItems: 'center', paddingVertical: 28 }]}>
-              <ActivityIndicator color={C.gold} size="large" />
-              <Text style={[s.modalText, { marginTop: 14 }]}>{busy}</Text>
-            </View>
-          </View>
-        </Modal>
+        ) : null}
       </Ctx.Provider>
     </SafeAreaProvider>
   );

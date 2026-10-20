@@ -9,6 +9,7 @@ import { nextUserFixture, clubLeaguePos, lastResults, resultLetter, scoreText, u
 import { teamName, teamFlag, teamColor, isNat } from '../engine/teams';
 import { NATION_BY_CODE } from '../data/nations';
 import { isWindow } from '../engine/fixtures';
+import { bcStart, bcEnd, logError } from '../diag';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -21,6 +22,8 @@ export async function continueGame(G) {
   let days = 0;
   G.setBusy(`Идёт время… ${fmtShort(W.year, W.day)}`);
   await wait(40);
+  const t0 = Date.now();
+  await bcStart(W, 'continue');
   try {
     while (days < 400) {
       r = advance(W, 3);
@@ -32,10 +35,14 @@ export async function continueGame(G) {
     }
   } catch (e) {
     console.warn(e);
+    logError(W, 'continue', e);
+    await bcEnd(W, 'continue-error', Date.now() - t0);
     G.setBusy(null);
-    G.alert('Ошибка', String(e?.message || e));
+    G.save(true);
+    G.alert('Ошибка', `${String(e?.message || e)}\n\nОтчёт для разработчика — в «Ещё → Диагностика».`);
     return;
   }
+  await bcEnd(W, 'continue', Date.now() - t0);
   G.setBusy(null);
   G.refresh();
   G.save(true);

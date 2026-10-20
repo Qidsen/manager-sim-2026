@@ -40,12 +40,13 @@ export default function MoreScreen() {
         <Item icon="newspaper" color={C.blue} title="Новости" sub="Трансферы и победители" onPress={() => G.push('news')} />
         <Item icon="trophy" color={C.gold} title="История турниров" sub="Все чемпионы по сезонам" onPress={() => G.push('history')} />
         <Item icon="server" color={C.accent} title="База игроков" sub="Реальные составы и свой файл" onPress={() => G.push('database')} />
+        <Item icon="pulse" color={C.red} title="Диагностика" sub="Проверить сохранение и отправить отчёт" onPress={() => G.push('diag')} />
       </Card>
       <Card title="Игра" icon="game-controller-outline">
         <Item icon="save" color={C.muted} title="Сохранить" sub="Игра сохраняется сама, но можно и вручную" onPress={async () => { await saveGame(W); G.alert('Сохранено', 'Прогресс записан.'); }} />
         <Item icon="exit" color={C.red} title="В главное меню" sub="С сохранением" onPress={() => G.toMenu()} />
       </Card>
-      <Text style={s.ver}>MANAGER SIM 2026 · ВЕРСИЯ 1.1</Text>
+      <Text style={s.ver}>MANAGER SIM 2026 · ВЕРСИЯ 1.2</Text>
     </Page>
   );
 }

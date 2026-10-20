@@ -9,6 +9,7 @@ import { teamName, teamFlag, teamColor, teamPool, teamTactic, isUserTeam } from 
 import { FORMATIONS, MENTALITY, POS_RU, slotRating, fmtDate } from '../engine/util';
 import { PosBadge } from '../ui/playerRow';
 import { lastResults, resultLetter } from '../engine/query';
+import { bcStart, bcEnd, logError } from '../diag';
 
 const SPEEDS = { 1: 420, 2: 180, 4: 60 };
 const EV = {
@@ -73,7 +74,12 @@ export default function MatchScreen() {
   function finish() {
     if (finalized.current) return;
     finalized.current = true;
-    finalizeMatch(W, e, m, S.current);
+    try {
+      finalizeMatch(W, e, m, S.current);
+    } catch (err) {
+      logError(W, 'finalizeMatch', err);
+    }
+    bcEnd(W, 'match', 0);
     setPhase('post');
     G.refresh();
     G.save(true);
@@ -81,6 +87,7 @@ export default function MatchScreen() {
 
   const start = (quick = false) => {
     thud();
+    bcStart(W, 'match');
     S.current = prepareMatch(W, e, m, true);
     setPhase('live');
     if (quick) {

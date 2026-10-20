@@ -5,6 +5,7 @@ import { C, F, Btn, T, Icon } from '../ui/kit';
 import { useG } from '../ui/ctx';
 import { hasSave, loadGame, deleteSave } from '../storage';
 import { seasonLabel, fmtDate } from '../engine/util';
+import { readUnfinished } from '../diag';
 
 export default function TitleScreen() {
   const G = useG();
@@ -13,6 +14,7 @@ export default function TitleScreen() {
 
   useEffect(() => {
     (async () => {
+      await readUnfinished();
       if (await hasSave()) setSave(await loadGame());
       setLoading(false);
     })();

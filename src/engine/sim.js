@@ -4,7 +4,7 @@ import { NATIONS, NATION_BY_CODE } from '../data/nations';
 import { rand, randInt, chance, pick, shuffle, weighted, gauss, getState, seed } from './rng';
 import { recalcOvr, playerValue, wageFor, clamp, POS_WEIGHTS, ATTRS, LINE, money, fmtDate, seasonLabel } from './util';
 import { createMatch, simulateFull, applyResults, winnerSide, quickMatch } from './match';
-import { buildSeason, buildFinals, recordResult, recordFriendly, koContext, sortRows, addFriendly } from './comps';
+import { buildSeason, buildFinals, recordResult, recordFriendly, koContext, sortRows, addFriendly, healComp } from './comps';
 import { INTL_DAYS, SUMMER_DAYS, isWindow, WINDOWS } from './fixtures';
 import { teamName, teamPool, teamTactic, isNat, natCode, isUserTeam, callUp, invalidateNatIndex, teamRep } from './teams';
 import { levelOfRep, youthPlayer, newStats, newFin, fillNations, makePlayer, randomName } from './gen';
@@ -18,6 +18,11 @@ export function mail(W, title, body, opts = {}) {
 export function news(W, text) {
   W.news.unshift({ y: W.year, d: W.day, text });
   if (W.news.length > 150) W.news.length = 150;
+}
+
+function logErr(W, where, e) {
+  (W.errors ||= []).push({ where, msg: String(e?.message || e).slice(0, 300), stack: String(e?.stack || '').slice(0, 400), y: W.year, d: W.day, t: Date.now() });
+  if (W.errors.length > 20) W.errors.splice(0, W.errors.length - 20);
 }
 
 // ================= новая игра =================
@@ -200,9 +205,23 @@ function playDayMatches(W) {
     if (!st) continue;
     for (const m of (st.rounds[e.r] || []).slice()) {
       if (m.hg !== null || !m.h || !m.a) continue;
-      const S = prepareMatch(W, e, m, false);
-      quickMatch(W, S);
-      finalizeMatch(W, e, m, S);
+      try {
+        const S = prepareMatch(W, e, m, false);
+        quickMatch(W, S);
+        finalizeMatch(W, e, m, S);
+      } catch (err) {
+        // один сломанный матч не должен останавливать всю игру
+        logErr(W, `match ${e.c}`, err);
+        if (m.hg === null) {
+          try {
+            if (comp.id === 'FR') recordFriendly(W, m, { hg: 0, ag: 0, gl: [] });
+            else recordResult(W, comp, e.s, m, { hg: 1, ag: 0, gl: [], pen: null });
+          } catch (err2) {
+            logErr(W, `match-fallback ${e.c}`, err2);
+            m.hg = 1; m.ag = 0; m.gl = [];
+          }
+        }
+      }
     }
   }
 }
@@ -212,8 +231,19 @@ function playDayMatches(W) {
 // Матч без соперника засчитывается технической победой.
 export function repairSchedule(W, userShift = 0) {
   let moved = 0;
+  // битые записи расписания
+  for (const d in W.sched) {
+    const before = W.sched[d].length;
+    W.sched[d] = W.sched[d].filter((e) => W.comps[e.c]?.stages[e.s]?.rounds[e.r]);
+    moved += before - W.sched[d].length;
+  }
   for (const cid in W.comps) {
     const comp = W.comps[cid];
+    try {
+      if (healComp(W, comp)) moved++;
+    } catch (e) {
+      (W.errors ||= []).push({ where: `heal ${cid}`, msg: String(e?.message || e), stack: String(e?.stack || '').slice(0, 300), y: W.year, d: W.day, t: Date.now() });
+    }
     comp.stages.forEach((st, si) => {
       st.rounds.forEach((r, ri) => {
         for (const m of r) {
@@ -264,8 +294,16 @@ export function processDay(W) {
     }
   }
   playDayMatches(W);
-  dailyTick(W);
-  handleEvents(W);
+  try {
+    dailyTick(W);
+  } catch (err) {
+    logErr(W, 'dailyTick', err);
+  }
+  try {
+    handleEvents(W);
+  } catch (err) {
+    logErr(W, 'events', err);
+  }
   W.day++;
   if (W.day >= 365) rollover(W);
   W.rng = getState();
