@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, useWindowDimensions } from 'react-native';
+import { View, Text, Pressable, TextInput, useWindowDimensions } from 'react-native';
 import { C, T, Seg, Chips, Card, Btn, ratingColor, F } from '../ui/kit';
 import Page from '../ui/page';
 import { useG } from '../ui/ctx';
 import PlayerRow from '../ui/playerRow';
-import { FORMATIONS, FORMATION_NAMES, MENTALITY, PRESSING, TEMPO, POS_RU, slotRating } from '../engine/util';
+import { FORMATIONS, MENTALITY, PRESSING, TEMPO, POS_RU, POS_FULL, slotRating, BASE_FORMATIONS, customKey, registerCustomFormations, posFromSpot, NEAR } from '../engine/util';
 import { resolveLineup, autoLineup } from '../engine/match';
 import { teamPool, teamTactic, teamName } from '../engine/teams';
 
@@ -49,6 +49,7 @@ export function TacticsBody({ team }) {
   const tac = teamTactic(W, team);
   const pool = teamPool(W, team);
   const [sel, setSel] = useState(null); // индекс слота
+  const [edit, setEdit] = useState(false);
   const lu = resolveLineup(W, pool, tac);
 
   const commit = (xi, bench) => {
@@ -84,7 +85,11 @@ export function TacticsBody({ team }) {
 
   return (
     <>
-      <Chips options={FORMATION_NAMES} value={tac.form} onChange={(f) => { tac.form = f; if (tac.auto) tac.xi = null; G.refresh(); }} style={{ marginBottom: 12 }} />
+      <Chips options={Object.keys(FORMATIONS)} value={tac.form} onChange={(f) => { tac.form = f; if (tac.auto) tac.xi = null; G.refresh(); }} style={{ marginBottom: 8 }} />
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+        <Btn small icon="create-outline" title={BASE_FORMATIONS.includes(tac.form) ? 'Своя схема на основе этой' : 'Редактировать схему'} kind="ghost" style={{ flex: 1 }} onPress={() => setEdit(true)} />
+      </View>
+      {edit ? <FormationEditor W={W} G={G} tac={tac} width={Math.min(width - 28, 420)} onClose={() => setEdit(false)} /> : null}
       <Pitch W={W} form={tac.form} xi={lu.xi} selected={sel} onSlot={onSlot} width={Math.min(width - 28, 420)} />
       <T muted size={12} center style={{ marginVertical: 8 }}>
         {sel === null ? 'Нажмите на игрока на поле, затем на другого игрока или запасного, чтобы поменять их местами.' : 'Выберите, кого поставить на эту позицию.'}
@@ -115,6 +120,102 @@ export function TacticsBody({ team }) {
         </Card>
       ) : null}
     </>
+  );
+}
+
+// Редактор своей схемы: выберите точку — затем место на поле, куда её поставить.
+function FormationEditor({ W, G, tac, width, onClose }) {
+  const isCustom = !BASE_FORMATIONS.includes(tac.form);
+  const [slots, setSlots] = useState(() => FORMATIONS[tac.form].map((s) => s.slice()));
+  const [sel, setSel] = useState(null);
+  const [name, setName] = useState(isCustom ? tac.form.replace(/^★ /, '') : `Моя ${tac.form}`);
+  const h = width * 1.15;
+
+  const place = (e) => {
+    if (sel === null || sel === 0) return;
+    const { locationX, locationY } = e.nativeEvent;
+    const x = Math.max(0.06, Math.min(0.94, locationX / width));
+    const y = Math.max(0.14, Math.min(0.92, 1 - locationY / h));
+    const pos = posFromSpot(x, y);
+    const next = slots.slice();
+    next[sel] = [pos === 'GK' ? 'CB' : pos, +x.toFixed(3), +y.toFixed(3)];
+    setSlots(next);
+  };
+  const setPos = (pos) => {
+    if (sel === null || sel === 0) return;
+    const next = slots.slice();
+    next[sel] = [pos, next[sel][1], next[sel][2]];
+    setSlots(next);
+  };
+  const shape = (() => {
+    const d = slots.slice(1).filter((s) => s[2] < 0.36).length;
+    const m = slots.slice(1).filter((s) => s[2] >= 0.36 && s[2] < 0.72).length;
+    return `${d}-${m}-${10 - d - m}`;
+  })();
+  const save = () => {
+    const nm = name.trim().slice(0, 18);
+    if (!nm) return G.alert('Название', 'Введите название схемы.');
+    if (BASE_FORMATIONS.includes(customKey(nm))) return G.alert('Название', 'Такое имя занято.');
+    W.customForms ||= {};
+    if (isCustom && tac.form !== customKey(nm)) delete W.customForms[tac.form.replace(/^★ /, '')];
+    W.customForms[nm] = slots;
+    registerCustomFormations(W);
+    tac.form = customKey(nm);
+    if (tac.auto) tac.xi = null;
+    G.save?.();
+    G.refresh();
+    onClose();
+  };
+  const remove = () => {
+    G.dialog?.({
+      title: 'Удалить схему?',
+      text: `«${tac.form}» будет удалена у всех ваших команд.`,
+      buttons: [
+        { title: 'Отмена', kind: 'ghost' },
+        { title: 'Удалить', kind: 'danger', onPress: () => { delete W.customForms[tac.form.replace(/^★ /, '')]; registerCustomFormations(W); G.refresh(); onClose(); } },
+      ],
+    });
+  };
+  const cur = sel !== null ? slots[sel] : null;
+  const opts = cur && cur[0] !== 'GK' ? [cur[0], ...(NEAR[cur[0]] || []), posFromSpot(cur[1], cur[2])].filter((v, i, a) => v !== 'GK' && a.indexOf(v) === i) : [];
+
+  return (
+    <Card title={`Редактор схемы · ${shape}`} icon="construct-outline">
+      <T muted size={12} style={{ marginBottom: 8 }}>
+        {sel === null ? 'Нажмите на точку, затем на место на поле, куда её передвинуть.' : sel === 0 ? 'Вратарь всегда стоит в воротах.' : 'Теперь нажмите на поле — игрок переместится туда.'}
+      </T>
+      <View style={{ width, height: h, backgroundColor: C.pitch, borderRadius: 18, overflow: 'hidden', alignSelf: 'center', borderWidth: 2, borderColor: C.gold }}>
+        <Pressable onPress={place} style={{ position: 'absolute', left: 0, top: 0, width, height: h }}>
+          {Array.from({ length: 10 }).map((_, i) => (
+            <View key={`s${i}`} pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: (h / 10) * i, height: h / 10, backgroundColor: i % 2 ? C.pitch2 : C.pitch }} />
+          ))}
+          <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: h / 2, height: 2, backgroundColor: C.pitchLine }} />
+          <View pointerEvents="none" style={{ position: 'absolute', left: width / 2 - 40, top: h / 2 - 40, width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: C.pitchLine }} />
+          <View pointerEvents="none" style={{ position: 'absolute', left: width * 0.25, width: width * 0.5, bottom: 0, height: h * 0.14, borderWidth: 2, borderColor: C.pitchLine, borderBottomWidth: 0 }} />
+        </Pressable>
+        {slots.map(([pos, x, y], i) => {
+          const on = sel === i;
+          return (
+            <Pressable key={i} onPress={() => setSel(on ? null : i)} hitSlop={6} style={{ position: 'absolute', left: x * width - 22, top: Math.min(h - 48, (1 - y) * h - 22), width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? C.gold : 'rgba(5,8,15,0.85)', borderWidth: 2.5, borderColor: on ? '#fff' : C.pitchLine }}>
+              <Text style={{ color: on ? '#1A1206' : '#fff', fontFamily: F.d7, fontSize: 13 }}>{POS_RU[pos]}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {opts.length ? (
+        <>
+          <T muted size={12} style={{ marginTop: 10, marginBottom: 6 }}>Роль точки: {POS_FULL[cur[0]]}</T>
+          <Chips options={opts.map((o) => ({ value: o, label: POS_RU[o] }))} value={cur[0]} onChange={setPos} />
+        </>
+      ) : null}
+      <T muted size={12} style={{ marginTop: 12, marginBottom: 6 }}>Название</T>
+      <TextInput value={name} onChangeText={setName} maxLength={18} placeholder="Например, Мой прессинг" placeholderTextColor={C.dim} style={{ backgroundColor: C.card2, borderRadius: 12, borderWidth: 1, borderColor: C.line, color: C.text, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 }} />
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+        <Btn small title="Отмена" kind="ghost" style={{ flex: 1 }} onPress={onClose} />
+        {isCustom ? <Btn small title="Удалить" kind="danger" style={{ flex: 1 }} onPress={remove} /> : null}
+        <Btn small title="Сохранить" kind="gold" style={{ flex: 1.3 }} onPress={save} />
+      </View>
+    </Card>
   );
 }
 

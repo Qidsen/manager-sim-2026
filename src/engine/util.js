@@ -36,7 +36,7 @@ export function ovrAs(p, pos) {
 }
 
 // насколько игрок подходит на чужую позицию
-const NEAR = {
+export const NEAR = {
   GK: [],
   CB: ['DM', 'LB', 'RB'],
   LB: ['LW', 'CB', 'RB'],
@@ -56,8 +56,55 @@ export function fitFactor(natural, slot) {
   return 0.7;
 }
 export function slotRating(p, slot) {
-  // рейтинг игрока на конкретной позиции схемы
-  return Math.min(p.ovr, ovrAs(p, slot)) * fitFactor(p.pos, slot);
+  // рейтинг игрока на конкретной позиции схемы; освоенные дополнительные позиции почти без штрафа
+  const f = p.alt && p.alt.includes(slot) ? 0.97 : fitFactor(p.pos, slot);
+  return Math.min(Math.max(p.ovr, p.alt && p.alt.includes(slot) ? ovrAs(p, slot) : 0), ovrAs(p, slot)) * f;
+}
+
+// ---------- свои схемы ----------
+export const customKey = (name) => `★ ${name}`;
+export function registerCustomFormations(W) {
+  for (const k of Object.keys(FORMATIONS)) if (!BASE_FORMATIONS.includes(k)) delete FORMATIONS[k];
+  for (const [name, slots] of Object.entries(W.customForms || {})) FORMATIONS[customKey(name)] = slots;
+  // если схема пропала (удалена) — возвращаем команду на 4-3-3
+  const fix = (t) => { if (t && !FORMATIONS[t.form]) { t.form = FORMATIONS['4-3-3'] ? '4-3-3' : BASE_FORMATIONS[0]; t.xi = null; t.bench = null; t.auto = true; } };
+  for (const c of Object.values(W.clubs || {})) fix(c.tactic);
+  for (const n of Object.values(W.nations || {})) fix(n.tactic);
+}
+
+// Позиция по месту на поле: x — поперёк (0 — левый фланг), y — глубина (0 — свои ворота)
+export function posFromSpot(x, y) {
+  const wide = x < 0.24 ? 'L' : x > 0.76 ? 'R' : null;
+  if (y < 0.12) return 'GK';
+  if (y < 0.33) return wide === 'L' ? 'LB' : wide === 'R' ? 'RB' : 'CB';
+  if (y < 0.46) return wide === 'L' ? 'LB' : wide === 'R' ? 'RB' : 'DM';
+  if (y < 0.6) return wide === 'L' ? 'LW' : wide === 'R' ? 'RW' : 'CM';
+  if (y < 0.74) return wide === 'L' ? 'LW' : wide === 'R' ? 'RW' : 'AM';
+  return wide === 'L' ? 'LW' : wide === 'R' ? 'RW' : 'ST';
+}
+
+// ---------- роли развития (как в карьере EA FC) ----------
+export const DEV_ROLES = {
+  GK: [['classic', 'Классический вратарь', ['gk', 'phy']], ['sweeper', 'Вратарь-распасовщик', ['gk', 'pas']]],
+  CB: [['stopper', 'Стоппер', ['def', 'phy']], ['ballplay', 'Распасовщик', ['def', 'pas']], ['quick', 'Скоростной защитник', ['def', 'pac']]],
+  LB: [['defwb', 'Оборонительный крайний', ['def', 'phy']], ['attwb', 'Атакующий крайний', ['pac', 'pas']], ['inverted', 'Инвертированный крайний', ['pas', 'tec']]],
+  RB: [['defwb', 'Оборонительный крайний', ['def', 'phy']], ['attwb', 'Атакующий крайний', ['pac', 'pas']], ['inverted', 'Инвертированный крайний', ['pas', 'tec']]],
+  DM: [['destroyer', 'Разрушитель', ['def', 'phy']], ['deeplay', 'Опорный плеймейкер', ['pas', 'tec']]],
+  CM: [['b2b', 'Box-to-box', ['phy', 'pas']], ['playmaker', 'Плеймейкер', ['pas', 'tec']], ['runner', 'Подключающийся', ['sho', 'pac']]],
+  AM: [['creator', 'Креативный', ['pas', 'tec']], ['shadow', 'Теневой нападающий', ['sho', 'tec']]],
+  LW: [['winger', 'Скоростной вингер', ['pac', 'tec']], ['invwing', 'Инвертированный вингер', ['sho', 'tec']], ['wideplay', 'Фланговый плеймейкер', ['pas', 'tec']]],
+  RW: [['winger', 'Скоростной вингер', ['pac', 'tec']], ['invwing', 'Инвертированный вингер', ['sho', 'tec']], ['wideplay', 'Фланговый плеймейкер', ['pas', 'tec']]],
+  ST: [['poacher', 'Бомбардир', ['sho', 'pac']], ['target', 'Таран', ['sho', 'phy']], ['false9', 'Ложная девятка', ['tec', 'pas']]],
+};
+export function devRole(p) {
+  const list = DEV_ROLES[p.pos] || [];
+  return list.find((r) => r[0] === p.dev?.role) || null;
+}
+// сколько недель переучиваться на позицию
+export function retrainWeeks(from, to) {
+  if (from === to) return 0;
+  if (NEAR[from]?.includes(to)) return LINE[from] === LINE[to] ? 8 : 12;
+  return 20;
 }
 
 export function recalcOvr(p) {
@@ -78,6 +125,8 @@ export const FORMATIONS = {
   '5-3-2': [['GK', 0.5, 0.04], ['RB', 0.9, 0.3], ['CB', 0.7, 0.2], ['CB', 0.5, 0.18], ['CB', 0.3, 0.2], ['LB', 0.1, 0.3], ['CM', 0.7, 0.52], ['DM', 0.5, 0.44], ['CM', 0.3, 0.52], ['ST', 0.62, 0.84], ['ST', 0.38, 0.84]],
   '5-4-1': [['GK', 0.5, 0.04], ['RB', 0.9, 0.3], ['CB', 0.7, 0.2], ['CB', 0.5, 0.18], ['CB', 0.3, 0.2], ['LB', 0.1, 0.3], ['RW', 0.84, 0.58], ['CM', 0.6, 0.52], ['CM', 0.4, 0.52], ['LW', 0.16, 0.58], ['ST', 0.5, 0.84]],
 };
+export const BASE_FORMATIONS = Object.keys(FORMATIONS);
+
 export const FORMATION_NAMES = Object.keys(FORMATIONS);
 
 export const MENTALITY = ['Очень оборонительно', 'Оборонительно', 'Сбалансированно', 'Атакующе', 'Очень атакующе'];

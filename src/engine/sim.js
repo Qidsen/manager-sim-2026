@@ -2,7 +2,7 @@
 import { LEAGUES, LEAGUE_BY_ID } from '../data/leagues';
 import { NATIONS, NATION_BY_CODE } from '../data/nations';
 import { rand, randInt, chance, pick, shuffle, weighted, gauss, getState, seed } from './rng';
-import { recalcOvr, playerValue, wageFor, clamp, POS_WEIGHTS, ATTRS, LINE, money, fmtDate, seasonLabel } from './util';
+import { recalcOvr, playerValue, wageFor, clamp, POS_WEIGHTS, ATTRS, LINE, money, fmtDate, seasonLabel, POS_FULL, devRole, retrainWeeks } from './util';
 import { createMatch, simulateFull, applyResults, winnerSide, quickMatch } from './match';
 import { buildSeason, buildFinals, recordResult, recordFriendly, koContext, sortRows, addFriendly, healComp } from './comps';
 import { INTL_DAYS, SUMMER_DAYS, isWindow, WINDOWS } from './fixtures';
@@ -448,13 +448,44 @@ function weekly(W) {
     else if (p.age <= 27) d = (p.pot - p.ovr) * 0.0025;
     else if (p.age <= 29) d = 0;
     else d = -(p.age - 29) * 0.022;
-    d = (d * (d > 0 ? tf : 1 / tf) + gauss(0, 0.05)) * 4;
+    const dev = p.dev;
+    const indiv = dev ? [0.85, 1, 1.2][dev.int ?? 1] : 1;
+    d = (d * (d > 0 ? tf * indiv : 1 / tf) + gauss(0, 0.05)) * 4;
     if (p.inj > 20 && d > 0) d *= 0.5;
+    // переучивание на новую позицию
+    if (dev?.newPos) {
+      const weeks = retrainWeeks(p.pos, dev.newPos) || 8;
+      dev.prog = Math.min(100, (dev.prog || 0) + (400 / weeks) * indiv * (p.inj > 0 ? 0.3 : 1) * (p.age <= 24 ? 1.15 : p.age >= 31 ? 0.8 : 1));
+      if (dev.prog >= 100) {
+        const old = p.pos;
+        p.alt = Array.from(new Set([...(p.alt || []), old])).filter((x) => x !== dev.newPos).slice(-2);
+        p.pos = dev.newPos;
+        dev.newPos = null;
+        dev.prog = 0;
+        dev.role = null;
+        const before = p.ovr;
+        recalcOvr(p);
+        if (p.ovr > p.pot) p.pot = p.ovr;
+        if (W.user?.club && p.club === W.user.club) mail(W, `${p.n} освоил новую позицию`, `${p.n} теперь играет на позиции «${POS_FULL[p.pos]}» (рейтинг ${before} → ${p.ovr}). Прежняя позиция остаётся запасной.`);
+      }
+    }
+    // индивидуальная нагрузка повышает риск травмы
+    if (dev && dev.int === 2 && club && p.inj <= 0 && chance(0.004)) {
+      p.inj = randInt(5, 18);
+      if (W.user?.club === club.id) mail(W, `Травма: ${p.n}`, `${p.n} травмировался на индивидуальной тренировке (высокая нагрузка) и пропустит около ${Math.ceil(p.inj / 7)} нед.`);
+    }
     if (Math.abs(d) < 0.001) continue;
     const w = POS_WEIGHTS[p.pos];
+    const roleAttrs = devRole(p)?.[2] || null;
+    const focus = dev?.focus && dev.focus !== 'auto' ? dev.focus : null;
     for (const k of ATTRS) {
       const kw = w[k] || 0;
-      p.a[k] = Math.round(clamp(p.a[k] + d * (kw > 0 ? 1 : 0.3) * (0.7 + rand() * 0.6), 5, 99) * 10) / 10;
+      let mult = kw > 0 ? 1 : 0.3;
+      if (d > 0) {
+        if (roleAttrs) mult *= roleAttrs.includes(k) ? 1.7 : 0.75;
+        if (focus) mult *= k === focus ? 1.6 : 0.85;
+      } else if (roleAttrs && roleAttrs.includes(k)) mult *= 0.6; // ветераны дольше сохраняют навыки своей роли
+      p.a[k] = Math.round(clamp(p.a[k] + d * mult * (0.7 + rand() * 0.6), 5, 99) * 10) / 10;
     }
     recalcOvr(p);
     if (p.ovr > p.pot) p.pot = p.ovr;

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { C, F, T, Card, Btn, Bar, Rating, Field, Seg, Stat, Badge, ratingColor } from '../ui/kit';
 import Page from '../ui/page';
 import { useG } from '../ui/ctx';
-import { POS_FULL, POS_RU, ATTRS, ATTR_RU, money, playerValue, clamp } from '../engine/util';
+import { POS_FULL, POS_RU, ATTRS, ATTR_RU, money, playerValue, clamp, DEV_ROLES, NEAR, ovrAs, retrainWeeks } from '../engine/util';
 import { NATION_BY_CODE } from '../data/nations';
 import { ROLES } from '../engine/market';
 import { makeBid, requestLoan, quickSell, releasePlayer, renewContract, renewDemand, talkToPlayer, wageDemand, askingPrice, promoteYouth, releaseYouth } from '../engine/sim';
@@ -82,6 +82,8 @@ export default function PlayerScreen({ id }) {
           </View>
         ))}
       </Card>
+
+      {mine ? <DevCard W={W} p={p} onChange={() => G.refresh()} /> : null}
 
       <Card title="Статистика" icon="stats-chart-outline">
         <View style={{ flexDirection: 'row' }}>
@@ -193,4 +195,67 @@ const ps = StyleSheet.create({
   fact: { flexGrow: 1, flexBasis: '45%', backgroundColor: 'rgba(5,8,15,0.5)', borderRadius: 12, paddingVertical: 8, paddingHorizontal: 8, alignItems: 'center' },
   factVal: { color: C.text, fontFamily: F.d8, fontSize: 18 },
   factLbl: { color: C.muted, fontSize: 10, marginTop: 1 },
+});
+
+function DevCard({ W, p, onChange }) {
+  const dev = p.dev || { role: null, int: 1, newPos: null, prog: 0, focus: 'auto' };
+  const set = (patch) => {
+    p.dev = { ...dev, ...patch };
+    onChange();
+  };
+  const roles = DEV_ROLES[p.pos] || [];
+  const near = (NEAR[p.pos] || []).filter((x) => x !== p.pos);
+  const role = roles.find((r) => r[0] === dev.role);
+  return (
+    <Card title="Развитие" icon="trending-up">
+      <T muted size={12} style={{ marginBottom: 6 }}>Роль — какие навыки растут в первую очередь</T>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+        <Pressable onPress={() => set({ role: null })} style={[dv.chip, !dev.role && dv.chipOn]}>
+          <Text style={[dv.chipT, !dev.role && { color: '#1A1206' }]}>Сбалансированно</Text>
+        </Pressable>
+        {roles.map(([key, label]) => (
+          <Pressable key={key} onPress={() => set({ role: key })} style={[dv.chip, dev.role === key && dv.chipOn]}>
+            <Text style={[dv.chipT, dev.role === key && { color: '#1A1206' }]}>{label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {role ? (
+        <T size={12} color={C.gold} style={{ marginBottom: 10 }}>Приоритет: {role[2].map((k) => ATTR_RU[k].toLowerCase()).join(' и ')}</T>
+      ) : <View style={{ height: 6 }} />}
+      <T muted size={12} style={{ marginBottom: 6 }}>Индивидуальная нагрузка</T>
+      <Seg options={[{ value: 0, label: 'Лёгкая' }, { value: 1, label: 'Обычная' }, { value: 2, label: 'Высокая' }]} value={dev.int ?? 1} onChange={(v) => set({ int: v })} style={{ marginBottom: 6 }} />
+      <T muted size={11} style={{ marginBottom: 12 }}>{dev.int === 2 ? 'Рост +20%, но выше риск травмы.' : dev.int === 0 ? 'Рост −15%, игрок свежее и реже травмируется.' : 'Стандартный темп развития.'}</T>
+      <T muted size={12} style={{ marginBottom: 6 }}>Переучить на позицию{p.alt?.length ? ` · освоены: ${p.alt.map((x) => POS_RU[x]).join(', ')}` : ''}</T>
+      {near.length ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+          <Pressable onPress={() => set({ newPos: null, prog: 0 })} style={[dv.chip, !dev.newPos && dv.chipOn]}>
+            <Text style={[dv.chipT, !dev.newPos && { color: '#1A1206' }]}>Оставить {POS_RU[p.pos]}</Text>
+          </Pressable>
+          {near.map((pos) => (
+            <Pressable key={pos} onPress={() => set({ newPos: pos, prog: dev.newPos === pos ? dev.prog : 0 })} style={[dv.chip, dev.newPos === pos && dv.chipOn]}>
+              <Text style={[dv.chipT, dev.newPos === pos && { color: '#1A1206' }]}>{POS_RU[pos]} · {Math.round(ovrAs(p, pos))}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : (
+        <T muted size={12}>Для вратаря переучивание недоступно.</T>
+      )}
+      {dev.newPos ? (
+        <View style={{ marginTop: 10 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <T size={12}>{POS_FULL[p.pos]} → {POS_FULL[dev.newPos]}</T>
+            <T size={12} bold color={C.gold}>{Math.round(dev.prog || 0)}%</T>
+          </View>
+          <Bar value={dev.prog || 0} color={C.gold} height={6} style={{ marginTop: 4 }} />
+          <T muted size={11} style={{ marginTop: 4 }}>Около {Math.max(1, Math.round((retrainWeeks(p.pos, dev.newPos) * (100 - (dev.prog || 0))) / 100))} нед. Рейтинг на новой позиции сейчас: {Math.round(ovrAs(p, dev.newPos))}.</T>
+        </View>
+      ) : null}
+    </Card>
+  );
+}
+
+const dv = StyleSheet.create({
+  chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, backgroundColor: C.card2, borderWidth: 1, borderColor: C.line },
+  chipOn: { backgroundColor: C.gold, borderColor: C.gold },
+  chipT: { color: C.text, fontSize: 12, fontWeight: '700' },
 });

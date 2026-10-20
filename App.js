@@ -6,6 +6,7 @@ import { Ctx } from './src/ui/ctx';
 import { C, F, Btn, Icon, tap } from './src/ui/kit';
 import { useFonts } from 'expo-font';
 import { repairSchedule } from './src/engine/sim';
+import { registerCustomFormations } from './src/engine/util';
 import { logError } from './src/diag';
 import DiagScreen from './src/screens/Diag';
 import NegotiateScreen from './src/screens/Negotiate';
@@ -140,6 +141,7 @@ export default function App() {
           world.v = 2;
         }
         seed(world.rng || 1);
+        registerCustomFormations(world);
         try {
           const moved = repairSchedule(world);
           if (moved) console.log('перенесено матчей', moved);
