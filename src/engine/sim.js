@@ -6,7 +6,9 @@ import { recalcOvr, playerValue, wageFor, clamp, POS_WEIGHTS, ATTRS, LINE, money
 import { createMatch, simulateFull, applyResults, winnerSide, quickMatch } from './match';
 import { buildSeason, buildFinals, recordResult, recordFriendly, koContext, sortRows, addFriendly, healComp } from './comps';
 import { INTL_DAYS, SUMMER_DAYS, isWindow, WINDOWS } from './fixtures';
-import { processDebts } from './market';
+import { processDebts, processNegs, processClauses } from './market';
+import { maybePress, onUserResult, checkPromise, weeklyEvents } from './stories';
+import { makeObjectives, boardMonthly, boardSeasonEnd, IMP } from './board';
 import { weeklyCareer, monthlyPotential, planRecovery, planGrowth, planInjury, rankMismatch } from './career';
 import { teamName, teamPool, teamTactic, isNat, natCode, isUserTeam, callUp, invalidateNatIndex, teamRep } from './teams';
 import { levelOfRep, youthPlayer, newStats, newFin, fillNations, makePlayer, randomName } from './gen';
@@ -45,13 +47,10 @@ function startOfSeason(W, first = false) {
   if (u.club) {
     const c = W.clubs[u.club];
     preseasonFriendlies(W);
-    if (c.league) {
-      const order = W.leagues[c.league].clubs.slice().sort((a, b) => W.clubs[b].rep - W.clubs[a].rep);
-      u.target = Math.min(order.indexOf(c.id) + 1 + 1, order.length);
-      if (order.indexOf(c.id) === 0) u.target = 1;
-      const L = LEAGUE_BY_ID[c.league];
-      mail(W, `Сезон ${seasonLabel(W.year)}: задача от руководства`,
-        `Руководство «${c.name}» ждёт место не ниже ${u.target}-го в турнире «${L.name}».\n\nБюджет клуба: ${money(c.balance)}.\nЛетнее трансферное окно открыто до 31 августа.`);
+    const objs = makeObjectives(W);
+    if (objs.length) {
+      mail(W, `Сезон ${seasonLabel(W.year)}: цели правления`,
+        `Правление «${c.name}» ставит задачи на сезон:\n\n${objs.map((o) => `• ${o.text} — важность: ${IMP[o.imp].toLowerCase()}`).join('\n')}\n\nБюджет клуба: ${money(c.balance)}. Прогресс — в разделе «Офис → Правление».`, { kind: 'board' });
     }
   }
   if (u.nation) {
@@ -141,6 +140,11 @@ export function finalizeMatch(W, e, m, S) {
   // выручка от билетов
   const stage = comp.stages[e.s];
   if (!national && !stage.neutral) ticketIncome(W, m.h, comp);
+  if (!national && !stage.neutral && competitive && W.user?.club === m.h) {
+    const c = W.clubs[m.h];
+    c.attSum = (c.attSum || 0) + (c.lastAtt || 0) / c.stadium.cap;
+    c.attN = (c.attN || 0) + 1;
+  }
   // доверие и репутация тренера
   for (const [idx, id] of [[0, m.h], [1, m.a]]) {
     if (!isUserTeam(W, id) || !competitive) continue;
@@ -156,6 +160,13 @@ export function finalizeMatch(W, e, m, S) {
     }
     if (r > 0 && strong > 5) W.user.rep = clamp(W.user.rep + 0.4, 1, 99);
     if (r < 0 && strong < -5) W.user.rep = clamp(W.user.rep - 0.2, 1, 99);
+    if (!national && W.user.club === id) {
+      try {
+        checkPromise(W, opp, my, th);
+        onUserResult(W, my, th, opp, comp.name);
+        if (maybePress(W, S, idx, opp, comp)) mail(W, 'Пресс-конференция', 'Журналисты ждут вас после матча. Ответьте на вопросы — от ответов зависят мораль команды, отношение правления и фанатов.', { stop: true, kind: 'press' });
+      } catch (e) { logErr(W, 'stories', e); }
+    }
   }
   // кубковый вылет пользователя
   checkSacking(W);
@@ -391,10 +402,14 @@ function dailyTick(W) {
   }
   if (day % 7 === 4) weekly(W);
   if (isWindow(day)) {
-    aiTransfers(W, day < 100 ? 4 : 2);
+    aiTransfers(W, day === WINDOWS[0][1] || day === WINDOWS[1][1] ? 10 : day < 100 ? 4 : 2);
     userIncomingOffers(W);
   }
   if (day % 2 === 0) aiSignFreeAgents(W, isWindow(day) ? 3 : 1);
+  try { processNegs(W); } catch (e) { logErr(W, 'negs', e); }
+  if (W.user?.club && (day === WINDOWS[0][1] - 1 || day === WINDOWS[1][1] - 1)) {
+    mail(W, 'Завтра — дедлайн-дэй', 'Последний день трансферного окна. Клубы становятся сговорчивее, но незавершённые переговоры о трансферах после закрытия окна сгорят.', { stop: true });
+  }
   if (day === WINDOWS[0][1] || day === WINDOWS[1][1]) mail(W, 'Трансферное окно закрылось', 'Покупки и продажи снова станут доступны в следующее окно. Свободных агентов можно подписывать в любое время.');
   if (day === WINDOWS[1][0]) mail(W, 'Зимнее трансферное окно открыто', 'Окно открыто до конца января.');
   if (day === 280) youthIntake(W);
@@ -438,6 +453,11 @@ function roleCheck(W) {
 
 function weekly(W) {
   processDebts(W);
+  try { processClauses(W); } catch (e) { logErr(W, 'clauses', e); }
+  try {
+    const ev = weeklyEvents(W);
+    if (ev) mail(W, ev.title, `${ev.text}\n\nПримите решение в разделе «Офис → События».`, { stop: true, kind: 'event', ref: ev.id });
+  } catch (e) { logErr(W, 'events', e); }
   try {
     weeklyCareer(W);
     if (W._scoutDone?.length) {
@@ -518,6 +538,7 @@ function weekly(W) {
     }
   }
   if (monthly) {
+    try { boardMonthly(W, mail); } catch (e) { logErr(W, 'board', e); }
     const ch = monthlyPotential(W);
     if (ch.length) mail(W, 'Изменился потенциал игроков', `По оценке тренерского штаба:\n${ch.join('\n')}\n\nПотенциал растёт от ярких матчей и падает при долгом провале или без игровой практики.`);
   }
@@ -602,7 +623,28 @@ export function movePlayer(W, p, toClubId, fee, { loan = false } = {}) {
   p.youth = false;
   p.aca = false;
   p.mor = clamp(p.mor + 8, 0, 100);
+  if (W.user?.club === toClubId && !loan) (W.user.signed ||= []).push({ id: p.id, ovr: p.ovr, fee: fee || 0 });
+  applySellOn(W, p, from, to, fee);
   if (from && from.squad.length < 19) replenish(W, from);
+}
+
+// Пункты контракта: процент от перепродажи бывшему клубу
+function applySellOn(W, p, from, to, fee) {
+  const cl = p.clauses;
+  if (!cl) return;
+  if (cl.sellOn && from && fee > 0 && cl.sellOn.club !== to.id) {
+    const orig = W.clubs[cl.sellOn.club];
+    const amt = Math.round(fee * cl.sellOn.pct);
+    if (orig && amt > 0) {
+      from.balance -= amt;
+      from.fin.sales -= amt;
+      orig.balance += amt;
+      orig.fin.sales += amt;
+      if (W.user?.club === from.id) mail(W, 'Выплата за перепродажу', `«${orig.name}» получает ${Math.round(cl.sellOn.pct * 100)}% от продажи ${p.n}: ${money(amt)}.`);
+      if (W.user?.club === orig.id) mail(W, 'Процент от перепродажи', `${p.n} продан в «${to.name}». Вам причитается ${Math.round(cl.sellOn.pct * 100)}%: ${money(amt)}.`);
+    }
+  }
+  p.clauses = null;
 }
 
 function replenish(W, c) {
@@ -985,6 +1027,7 @@ export function acceptJob(W, offer) {
     u.club = offer.id;
     u.conf = 65;
     W.clubs[offer.id].tactic.auto = true;
+    makeObjectives(W);
     mail(W, 'Новая работа', `Вы возглавили «${W.clubs[offer.id].name}».`);
     if (W.day < 40) preseasonFriendlies(W);
   } else {
@@ -1024,11 +1067,16 @@ function rollover(W) {
     if (u.club && table.includes(u.club)) {
       const pos = table.indexOf(u.club) + 1;
       summary.user = { pos, league: L.name, target: u.target };
-      const delta = (u.target || pos) - pos;
-      u.conf = clamp(u.conf + delta * 6, 0, 100);
-      u.rep = clamp(u.rep + delta * 1.2, 1, 99);
+      if (!u.objs?.length) {
+        const delta = (u.target || pos) - pos;
+        u.conf = clamp(u.conf + delta * 6, 0, 100);
+        u.rep = clamp(u.rep + delta * 1.2, 1, 99);
+      }
     }
   }
+  let boardRes = null;
+  try { boardRes = boardSeasonEnd(W); } catch (e) { logErr(W, 'boardEnd', e); }
+  summary.board = boardRes;
   // повышение/вылет в Англии
   const e1 = qual.ENG1;
   const e2 = qual.ENG2;
@@ -1144,7 +1192,7 @@ function rollover(W) {
   W.year++;
   W.day = 0;
   buildSeason(W, qual);
-  mail(W, `Итоги сезона ${seasonLabel(W.year - 1)}`, `${summary.user ? `Ваша команда заняла ${summary.user.pos}-е место (цель — ${summary.user.target}).\n\n` : ''}Чемпионы:\n${champs}`, { stop: true, kind: 'season' });
+  mail(W, `Итоги сезона ${seasonLabel(W.year - 1)}`, `${summary.user ? `Ваша команда заняла ${summary.user.pos}-е место (цель — ${summary.user.target}).\n\n` : ''}${boardRes ? `${boardRes.text}\n${boardRes.lines.join('\n')}\n\n` : ''}Чемпионы:\n${champs}`, { stop: true, kind: 'season' });
   if (u.club && u.conf <= 0) checkSacking(W);
   jobOffers(W, false);
   startOfSeason(W, false);

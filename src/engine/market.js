@@ -1,9 +1,11 @@
 // Переговоры: трансфер (с клубом), контракт (с игроком), продление, продажа.
 // У каждой стороны есть скрытый минимум и запас терпения. Каждое встречное предложение
 // сдвигает позицию, слишком наглое — злит. Терпение кончилось — переговоры сорваны.
-import { rand, chance, randInt } from './rng';
+import { rand, chance, randInt, weighted } from './rng';
 import { playerValue, wageFor, clamp, money, roundMoney } from './util';
 import { movePlayer, mail, news, canTrade } from './sim';
+import { WINDOWS } from './fixtures';
+import { onUserSigning, rumour } from './stories';
 import { levelOfRep } from './gen';
 import { NATION_BY_CODE } from '../data/nations';
 
@@ -147,11 +149,15 @@ export function startTalks(W, pid, kind = 'buy') {
     neg.pat = randInt(3, 5);
     neg.log.push({ who: 'them', text: `Агент ${p.n}: «Мой клиент свободен. Хотим ${money(neg.wAsk)} в неделю и подъёмные ${money(neg.bonusAsk)}».` });
   } else {
-    neg.stage = 'fee';
+    // этап 1: официальный запрос — клуб ответит через 1–2 дня
+    neg.stage = 'wait';
     neg.fMin = clubMinFee(W, p);
     neg.fAsk = r100(neg.fMin * (1.18 + rand() * 0.25));
     neg.pat = randInt(3, 5) + (p.listed ? 1 : 0);
-    neg.log.push({ who: 'them', text: `${sellerName(W, p)[0].toUpperCase()}${sellerName(W, p).slice(1)}: «Готовы выслушать предложение. Мы оцениваем игрока в ${money(neg.fAsk)}».` });
+    neg.readyAt = today(W) + randInt(1, 2);
+    neg.log.push({ who: 'me', text: `Официальный запрос в ${p.club ? `«${sellerName(W, p)}»` : 'клуб игрока'}: на каких условиях вы готовы обсуждать переход ${p.n}?` });
+    neg.log.push({ who: 'sys', text: 'Ожидаем ответ клуба — обычно 1–2 дня. Продолжайте игру, ответ придёт на почту.' });
+    if (chance(0.5)) rumour(W, `«${my.name}» направил официальный запрос по ${p.n} (${sellerName(W, p)}).`);
   }
   W.negs[pid] = neg;
   return { neg };
@@ -164,7 +170,7 @@ function fail(W, neg, p, text, days = 21) {
 }
 
 // ---------- предложение по сумме трансфера ----------
-export function offerFee(W, pid, fee, installments = false) {
+export function offerFee(W, pid, fee, installments = false, cl = {}) {
   const neg = W.negs?.[pid];
   const p = W.players[pid];
   const my = W.clubs[W.user.club];
@@ -173,13 +179,20 @@ export function offerFee(W, pid, fee, installments = false) {
   const upfront = installments ? fee * 0.5 : fee;
   if (upfront > my.balance) return { error: `Не хватает денег: на счету ${money(my.balance)}${installments ? ' (первый платёж — половина суммы)' : ''}.` };
   // рассрочка ценится чуть меньше
-  const eff = installments ? fee * 0.93 : fee;
-  neg.log.push({ who: 'me', text: `Предлагаем ${money(fee)}${installments ? ' (половина сейчас, половина через год)' : ''}` });
+  const eff = (installments ? fee * 0.93 : fee) + clauseValue(p, fee, cl);
+  const extras = [];
+  if (installments) extras.push('половина сейчас, половина через год');
+  if (cl.addOn) extras.push(`+${money(cl.addOn)} бонусами после 25 матчей`);
+  if (cl.sellOn) extras.push(`${Math.round(cl.sellOn * 100)}% от перепродажи`);
+  if (cl.buyback) extras.push(`право обратного выкупа за ${money(r100(fee * 1.6))}`);
+  neg.log.push({ who: 'me', text: `Предлагаем ${money(fee)}${extras.length ? ` (${extras.join('; ')})` : ''}` });
   const who = sellerName(W, p);
   const Who = who[0].toUpperCase() + who.slice(1);
   if (eff >= neg.fMin) {
     neg.fee = fee;
     neg.inst = installments;
+    neg.cl = { sellOn: cl.sellOn || 0, addOn: cl.addOn || 0, buyback: !!cl.buyback };
+    if (neg.rival) neg.rival = null; // ставку соперника перебили
     neg.stage = 'contract';
     neg.side = 'player';
     neg.wMin = playerMinWage(W, p, my.id, neg.role, neg.years);
@@ -267,13 +280,22 @@ function complete(W, neg, p, { wage, years, bonus, role }) {
   p.contract = W.year + clamp(years, 1, 5) - 1;
   p.role = role;
   p.faDays = 0;
+  const sellerId = p.club;
   movePlayer(W, p, my.id, now);
+  if (neg.cl && sellerId) {
+    p.clauses = {};
+    if (neg.cl.sellOn) p.clauses.sellOn = { club: sellerId, pct: neg.cl.sellOn };
+    if (neg.cl.buyback) p.clauses.buyback = { club: sellerId, price: r100(fee * 1.6), until: W.year + 2 };
+    if (neg.cl.addOn) (W.addons ||= []).push({ pid: p.id, club: my.id, to: sellerId, amount: neg.cl.addOn, base: p.car.app || 0, need: 25 });
+    if (!p.clauses.sellOn && !p.clauses.buyback) p.clauses = null;
+  }
   if (neg.inst && fee - now > 0) (W.debts ||= []).push({ club: my.id, amount: fee - now, due: today(W) + 365, to: from });
   my.balance -= bonus;
   my.fin.buys += bonus;
   neg.log.push({ who: 'them', text: `Агент ${p.n}: «Мы согласны!» ${p.n} подписывает контракт до лета ${p.contract + 1}.`, good: true });
   mail(W, `Новичок: ${p.n}`, `${p.n} подписал контракт до лета ${p.contract + 1}. Трансфер: ${fee ? money(fee) : 'бесплатно'}${neg.inst ? ' (в рассрочку)' : ''}. Зарплата: ${money(p.wage)}/нед. Подъёмные: ${money(bonus)}. Роль: ${ROLES[role].label.toLowerCase()}.`);
   news(W, `${p.n} переходит из «${from}» в «${my.name}» за ${fee ? money(fee) : 'бесплатно'}`);
+  try { onUserSigning(W, p, fee); } catch {}
   return { done: true, msg: `Сделка закрыта! ${p.n} — ваш игрок.` };
 }
 
@@ -353,4 +375,147 @@ export function processDebts(W) {
     }
     return false;
   });
+}
+
+// ================= этапы сделки, конкуренты, дедлайн =================
+const Cap = (s) => s[0].toUpperCase() + s.slice(1);
+
+// Ответ на запрос: разрешение на переговоры или «не продаётся»
+function resolveEnquiry(W, neg, p) {
+  const my = W.clubs[W.user.club];
+  const seller = p.club ? W.clubs[p.club] : null;
+  const who = Cap(sellerName(W, p));
+  const rank = seller ? seller.squad.map((x) => W.players[x]).sort((a, b) => b.ovr - a.ovr).findIndex((x) => x.id === p.id) : 99;
+  neg.stage = 'fee';
+  if (seller && rank < 3 && !p.listed && seller.rep >= my.rep - 3 && chance(0.6)) {
+    neg.fMin *= 1.5;
+    neg.fAsk = r100(neg.fMin * 1.15);
+    neg.untouchable = true;
+    neg.log.push({ who: 'them', text: `${who}: «${p.n} не продаётся. Разговор возможен только при исключительном предложении — от ${money(neg.fAsk)}».` });
+  } else {
+    neg.log.push({ who: 'them', text: `${who}: «Разрешаем переговоры. ${p.listed ? 'Игрок выставлен на трансфер. ' : ''}Мы оцениваем его в ${money(neg.fAsk)}».`, good: true });
+  }
+  mail(W, `Ответ по ${p.n}`, `${who} ответил на ваш запрос. Продолжите переговоры в разделе «Трансферы».`, { stop: true, kind: 'neg', ref: p.id });
+}
+
+// Соперник по сделке: ставка другого клуба или перехват
+function rivalFor(W, p) {
+  const L = p.ovr;
+  const cands = Object.values(W.clubs).filter((c) => c.id !== W.user.club && c.id !== p.club && c.balance > playerValue(p) * 0.9 && Math.abs(levelOfRep(c.rep) - L) < 6);
+  return cands.length ? weighted(cands, (c) => (c.rep / 50) ** 2) : null;
+}
+
+export function processNegs(W) {
+  const negs = W.negs;
+  if (!negs || !W.user?.club) return;
+  const t = today(W);
+  const winEnd = WINDOWS.find(([a, b]) => W.day >= a && W.day <= b)?.[1];
+  for (const pid in negs) {
+    const neg = negs[pid];
+    const p = W.players[pid];
+    if (!p) { delete negs[pid]; continue; }
+    if (neg.status !== 'open') {
+      if (neg.status !== 'open' && neg.cooldown && neg.cooldown < t - 30) delete negs[pid];
+      continue;
+    }
+    if (neg.kind !== 'buy') continue;
+    if (neg.stage === 'wait' && t >= neg.readyAt) {
+      resolveEnquiry(W, neg, p);
+      continue;
+    }
+    // перехват: соперник дожал сделку, пока мы тянули
+    if (neg.rival && t >= neg.rival.until) {
+      const rc = W.clubs[neg.rival.club];
+      if (rc && p.club !== rc.id) {
+        const fee = p.fa ? 0 : neg.rival.fee;
+        p.wage = wageFor(p.ovr, p.age, rc.rep);
+        p.contract = W.year + randInt(2, 4);
+        const fromName = sellerName(W, p);
+        movePlayer(W, p, rc.id, fee);
+        neg.status = 'failed';
+        neg.cooldown = t + 365;
+        neg.log.push({ who: 'them', text: `Перехват! ${p.n} подписал контракт с «${rc.name}»${fee ? ` за ${money(fee)}` : ''}.`, bad: true });
+        mail(W, `Перехват: ${p.n}`, `Пока шли переговоры, «${rc.name}» увёл ${p.n}${fee ? ` за ${money(fee)}` : ''}.`, { stop: true });
+        news(W, `${p.n} переходит из «${fromName}» в «${rc.name}»${fee ? ` за ${money(fee)}` : ''}`);
+      }
+      neg.rival = null;
+      continue;
+    }
+    // соперник появляется: торг за игрока
+    if (!neg.rival && !neg.rivalSeen && (neg.stage === 'fee' || neg.stage === 'contract')) {
+      const hot = clamp((p.ovr - 66) / 20, 0.1, 1);
+      if (chance(0.02 * hot)) {
+        const rc = rivalFor(W, p);
+        if (rc) {
+          neg.rivalSeen = true;
+          if (neg.stage === 'fee') {
+            const rf = r100(Math.max(neg.fMin, neg.fAsk * 0.92) * (1.02 + rand() * 0.08));
+            neg.rival = { club: rc.id, fee: rf, until: t + 3 };
+            neg.fMin = Math.max(neg.fMin, rf * 1.03);
+            neg.fAsk = r100(Math.max(neg.fAsk, rf * 1.1));
+            neg.log.push({ who: 'them', text: `Битва за игрока: «${rc.name}» предложил ${money(rf)}. ${Cap(sellerName(W, p))}: «Перебейте ставку — у вас 3 дня».`, bad: true });
+          } else {
+            neg.rival = { club: rc.id, fee: neg.fee || 0, until: t + 2 };
+            neg.wMin *= 1.1;
+            neg.wAsk = r100(Math.max(neg.wAsk, neg.wMin * 1.08));
+            neg.log.push({ who: 'them', text: `Агент ${p.n}: «Нам поступило предложение от «${rc.name}». Если не договоримся за 2 дня — подпишем с ними. Теперь хотим ${money(neg.wAsk)} в неделю».`, bad: true });
+          }
+          mail(W, `Конкурент за ${p.n}`, `«${rc.name}» тоже претендует на ${p.n}. Ускорьте переговоры, иначе игрока уведут.`, { stop: true, kind: 'neg', ref: p.id });
+        }
+      }
+    }
+    // дедлайн: клубы сговорчивее, а после закрытия окна переговоры о трансфере сгорают
+    if (!p.fa && winEnd !== undefined && W.day === winEnd && (neg.stage === 'fee' || neg.stage === 'wait') && !neg.deadline) {
+      neg.deadline = true;
+      neg.fMin *= 0.93;
+      neg.log.push({ who: 'them', text: `${Cap(sellerName(W, p))}: «Сегодня дедлайн. Готовы обсудить разумное предложение».` });
+    }
+    if (!p.fa && winEnd === undefined && neg.stage !== 'contract') {
+      neg.status = 'failed';
+      neg.cooldown = t + 3;
+      neg.log.push({ who: 'them', text: 'Трансферное окно закрылось — сделка не состоялась.', bad: true });
+    }
+  }
+}
+
+// Бонусы за выступления (выплачиваются продавцу после N матчей) и право обратного выкупа
+export function processClauses(W) {
+  if (W.addons?.length) {
+    W.addons = W.addons.filter((a) => {
+      const p = W.players[a.pid];
+      if (!p || p.club !== a.club) return false;
+      if ((p.car.app || 0) - a.base < a.need) return true;
+      const c = W.clubs[a.club];
+      const to = W.clubs[a.to];
+      c.balance -= a.amount;
+      c.fin.buys += a.amount;
+      if (to) { to.balance += a.amount; to.fin.sales += a.amount; }
+      if (W.user?.club === c.id) mail(W, 'Бонус за выступления', `${p.n} сыграл ${a.need} матчей — «${to?.name || 'бывший клуб'}» получает бонус ${money(a.amount)}.`);
+      return false;
+    });
+  }
+  const u = W.user;
+  if (!u?.club || !canTrade(W)) return;
+  const my = W.clubs[u.club];
+  for (const pid of my.squad.slice()) {
+    const p = W.players[pid];
+    const bb = p?.clauses?.buyback;
+    if (!bb || bb.until < W.year) continue;
+    const orig = W.clubs[bb.club];
+    if (!orig || orig.balance < bb.price) continue;
+    if (playerValue(p) > bb.price * 1.2 && chance(0.2)) {
+      movePlayer(W, p, orig.id, bb.price);
+      mail(W, `Обратный выкуп: ${p.n}`, `«${orig.name}» воспользовался правом обратного выкупа и вернул ${p.n} за ${money(bb.price)}.`, { stop: true });
+      news(W, `«${orig.name}» выкупил ${p.n} обратно за ${money(bb.price)}`);
+    }
+  }
+}
+
+// Сколько продавец «добавляет» к сумме за пункты контракта
+export function clauseValue(p, fee, cl = {}) {
+  let v = 0;
+  if (cl.sellOn) v += fee * cl.sellOn * 0.4;
+  if (cl.addOn) v += cl.addOn * 0.55;
+  if (cl.buyback) v += fee * (p.age <= 23 ? 0.1 : 0.04);
+  return v;
 }

@@ -40,14 +40,18 @@ export default function OfficeScreen() {
   const offers = W.offers.filter((o) => club && W.players[o.pid]?.club === club.id).length;
   return (
     <Page title="Офис" sub={`${u.name}${club ? ` · ${club.name}` : ''}`}>
-      <Group title="Сообщения">
+      <Group title="Сообщения и медиа">
         <Tile icon="mail" color={C.orange} title="Почта" sub={unread ? `${unread} непрочитанных` : 'Всё прочитано'} badge={unread} onPress={() => G.push('inbox')} />
         <Tile icon="newspaper" color={C.blue} title="Новости" sub="Трансферы, победители, события" onPress={() => G.push('news')} />
+        <Tile icon="chatbubbles" color={C.accent} title="Соцсети" sub="Фанаты, инсайдеры, слухи" onPress={() => G.push('social')} />
+        <Tile icon="mic" color={C.gold} title="Пресса" sub={W.press ? 'Журналисты ждут!' : 'Ваш образ в СМИ'} badge={W.press ? 1 : 0} onPress={() => G.push('press')} />
+        <Tile icon="flash" color={C.orange} title="События" sub={W.events?.length ? `${W.events.length} ждут решения` : 'Всё спокойно'} badge={W.events?.length || 0} onPress={() => G.push('events')} />
         {club ? <Tile icon="eye" color={C.gold} title="Скаутинг" sub={`${W.scouting?.scouts?.length || 0} скаут(ов) · отчётов ${Object.keys(W.scouting?.reports || {}).length}`} badge={W.scouting?.unseen || 0} onPress={() => G.push('scouting')} /> : null}
         {club ? <Tile wide icon="pricetags" color={C.orange} title="Предложения за игроков" sub={offers ? `${offers} от других клубов — ответьте в «Трансферах»` : 'Новых предложений нет'} badge={offers} onPress={() => G.setTab('transfers')} /> : null}
       </Group>
       {club ? (
         <Group title="Клуб">
+          <Tile icon="business" color={C.gold} title="Правление" sub={`Доверие ${Math.round(u.conf)}% · цели сезона`} onPress={() => G.push('board')} />
           <Tile icon="wallet" color={C.accent} title="Финансы" sub={`Баланс ${money(club.balance)}`} onPress={() => G.push('club', { tab: 'fin' })} />
           <Tile icon="business" color={C.gold} title="Стадион" sub={`${club.stadium.cap.toLocaleString('ru-RU')} мест · билеты`} onPress={() => G.push('club', { tab: 'stadium' })} />
           <Tile icon="barbell" color={C.red} title="База и персонал" sub="Тренировки, врачи, скауты" onPress={() => G.push('club', { tab: 'train' })} />
@@ -64,7 +68,7 @@ export default function OfficeScreen() {
         <Tile icon="save" color={C.muted} title="Сохранить" sub="Сохраняется и само" onPress={async () => { await saveGame(W); G.alert('Сохранено', 'Прогресс записан.'); }} />
         <Tile icon="exit" color={C.red} title="Главное меню" sub="С сохранением" onPress={() => G.toMenu()} />
       </Group>
-      <Text style={s.ver}>MANAGER SIM 2026 · ВЕРСИЯ 1.7</Text>
+      <Text style={s.ver}>MANAGER SIM 2026 · ВЕРСИЯ 1.8</Text>
     </Page>
   );
 }

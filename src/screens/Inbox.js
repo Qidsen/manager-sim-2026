@@ -8,6 +8,10 @@ import { fmtShort } from '../engine/util';
 function iconFor(m) {
   const t = m.title;
   if (m.kind === 'offer' || t.startsWith('Предложение')) return ['cash', C.accent];
+  if (m.kind === 'press') return ['mic', C.gold];
+  if (m.kind === 'event') return ['flash', C.orange];
+  if (m.kind === 'neg' || t.includes('Перехват') || t.includes('Конкурент')) return ['chatbubbles', C.blue];
+  if (m.kind === 'board' || t.includes('Правление') || t.includes('Цель')) return ['business', C.gold];
   if (t.includes('Травма')) return ['medkit', C.red];
   if (t.includes('восстановился')) return ['fitness', C.accent];
   if (t.includes('Трофей')) return ['trophy', C.gold];
@@ -47,6 +51,10 @@ export default function InboxScreen() {
               <>
                 <T size={14} style={{ marginTop: 8, lineHeight: 20 }}>{m.body}</T>
                 {m.kind === 'offer' ? <Btn small title="К предложениям" style={{ marginTop: 10 }} onPress={() => G.setTab('transfers')} /> : null}
+                {m.kind === 'press' && W.press ? <Btn small title="На пресс-конференцию" icon="mic" style={{ marginTop: 10 }} onPress={() => G.push('press')} /> : null}
+                {m.kind === 'event' && W.events?.some((e) => e.id === m.ref) ? <Btn small title="Принять решение" icon="flash" style={{ marginTop: 10 }} onPress={() => G.push('events')} /> : null}
+                {m.kind === 'neg' && W.negs?.[m.ref]?.status === 'open' ? <Btn small title="К переговорам" icon="chatbubbles" style={{ marginTop: 10 }} onPress={() => G.push('negotiate', { pid: m.ref, kind: 'buy' })} /> : null}
+                {m.kind === 'board' ? <Btn small title="Цели правления" icon="business" style={{ marginTop: 10 }} onPress={() => G.push('board')} /> : null}
               </>
             ) : null}
           </Card>

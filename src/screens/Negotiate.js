@@ -47,6 +47,7 @@ function Amount({ label, value, onChange, hint, presets }) {
 }
 
 function Bubble({ m }) {
+  if (m.who === 'sys') return <T muted size={12} center style={{ marginVertical: 6, fontStyle: 'italic' }}>{m.text}</T>;
   const me = m.who === 'me';
   const col = m.good ? C.accent : m.bad ? C.red : null;
   return (
@@ -77,6 +78,9 @@ export default function NegotiateScreen({ pid, kind = 'buy' }) {
   const [role, setRole] = useState('first');
   const [share, setShare] = useState(0.5);
   const [loanFee, setLoanFee] = useState(0);
+  const [sellOn, setSellOn] = useState(0);
+  const [addOn, setAddOn] = useState(0);
+  const [buyback, setBuyback] = useState(false);
 
   useEffect(() => {
     const r = startTalks(W, pid, kind);
@@ -112,8 +116,10 @@ export default function NegotiateScreen({ pid, kind = 'buy' }) {
 
   if (!p) return <Page title="Переговоры" back><T muted>Игрок не найден.</T></Page>;
   const nat = NATION_BY_CODE[p.nat];
-  const stageNames = kind === 'renew' ? ['Контракт'] : kind === 'loan' ? ['Аренда'] : p.fa ? ['Контракт'] : ['Трансфер', 'Контракт'];
-  const curStage = !neg ? 0 : neg.stage === 'contract' && stageNames.length === 2 ? 1 : 0;
+  const stageNames = kind === 'renew' ? ['Контракт'] : kind === 'loan' ? ['Аренда'] : p.fa ? ['Контракт'] : ['Запрос', 'Трансфер', 'Контракт'];
+  const curStage = !neg || stageNames.length === 1 ? 0 : neg.stage === 'wait' ? 0 : neg.stage === 'fee' ? 1 : 2;
+  const rival = neg?.rival && neg.status === 'open' ? neg.rival : null;
+  const daysLeft = rival ? Math.max(0, rival.until - (W.year * 365 + W.day)) : 0;
   const open = neg && neg.status === 'open';
   const intr = my && kind !== 'renew' ? interest(W, p, my.id) : null;
 
@@ -178,13 +184,37 @@ export default function NegotiateScreen({ pid, kind = 'buy' }) {
             </ScrollView>
           </Card>
 
+          {rival ? (
+            <Card style={{ borderColor: C.red + '88', backgroundColor: C.redDim }}>
+              <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+                <Icon name="flash" size={22} color={C.red} />
+                <View style={{ flex: 1 }}>
+                  <T bold size={14}>Битва за игрока: «{W.clubs[rival.club]?.name}»</T>
+                  <T muted size={12}>{neg.stage === 'fee' ? `Их ставка ${money(rival.fee)}. ` : 'Предлагают игроку контракт. '}Осталось {daysLeft} дн. — иначе перехват.</T>
+                </View>
+              </View>
+            </Card>
+          ) : null}
+
+          {open && neg.stage === 'wait' ? (
+            <Card title="Запрос отправлен" icon="hourglass-outline">
+              <T muted size={13}>Клуб рассматривает запрос: ответит, готов ли обсуждать переход и на каких условиях. Обычно это 1–2 дня — продолжайте игру, ответ придёт на почту.</T>
+            </Card>
+          ) : null}
+
           {/* ввод */}
           {open && neg.stage === 'fee' ? (
             <Card title="Ваше предложение клубу" icon="cash-outline">
               <Amount label="Сумма трансфера" value={fee} onChange={setFee} hint={`их цена ${money(neg.fAsk)}`}
                 presets={[['их цена', neg.fAsk], ['−5%', neg.fAsk * 0.95], ['−10%', neg.fAsk * 0.9], ['−20%', neg.fAsk * 0.8], ['стоимость', playerValue(p)]]} />
               <Seg options={[{ value: false, label: 'Сразу' }, { value: true, label: 'В рассрочку 50/50' }]} value={inst} onChange={setInst} style={{ marginBottom: 12 }} />
-              <Btn title="ПРЕДЛОЖИТЬ" icon="send" onPress={() => after(offerFee(W, pid, fee, inst))} />
+              <T muted size={12} style={{ marginBottom: 6 }}>Пункты контракта (делают предложение привлекательнее)</T>
+              <T size={12} style={{ marginBottom: 4 }}>Процент продавцу от будущей перепродажи</T>
+              <Seg options={[0, 0.1, 0.2, 0.3].map((v) => ({ value: v, label: v ? `${v * 100}%` : 'нет' }))} value={sellOn} onChange={setSellOn} style={{ marginBottom: 10 }} />
+              <Amount label="Бонусы продавцу после 25 матчей игрока" value={addOn} onChange={setAddOn} presets={[['нет', 0], ['5%', fee * 0.05], ['10%', fee * 0.1], ['20%', fee * 0.2]]} />
+              <T size={12} style={{ marginBottom: 4 }}>Право обратного выкупа за {money(roundMoney(fee * 1.6))} (2 года)</T>
+              <Seg options={[{ value: false, label: 'Нет' }, { value: true, label: 'Дать право' }]} value={buyback} onChange={setBuyback} style={{ marginBottom: 12 }} />
+              <Btn title="ПРЕДЛОЖИТЬ" icon="send" onPress={() => after(offerFee(W, pid, fee, inst, { sellOn, addOn, buyback }))} />
               <T muted size={11} center style={{ marginTop: 8 }}>Бюджет: {money(my.balance)}</T>
             </Card>
           ) : null}

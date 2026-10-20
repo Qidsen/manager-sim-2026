@@ -8,10 +8,14 @@ import { useFonts } from 'expo-font';
 import { repairSchedule } from './src/engine/sim';
 import { registerCustomFormations } from './src/engine/util';
 import { loadLogos, discoverLogos } from './src/logos';
+import { makeObjectives } from './src/engine/board';
 import { logError } from './src/diag';
 import DiagScreen from './src/screens/Diag';
 import NegotiateScreen from './src/screens/Negotiate';
 import ScoutingScreen from './src/screens/Scouting';
+import BoardScreen from './src/screens/Board';
+import { PressScreen, EventsScreen } from './src/screens/Press';
+import { SocialScreen } from './src/screens/Career';
 import { saveGame } from './src/storage';
 import { seed } from './src/engine/rng';
 import TitleScreen from './src/screens/Title';
@@ -57,6 +61,10 @@ const STACK = {
   diag: DiagScreen,
   negotiate: NegotiateScreen,
   scouting: ScoutingScreen,
+  board: BoardScreen,
+  press: PressScreen,
+  events: EventsScreen,
+  social: SocialScreen,
 };
 
 export default function App() {
@@ -149,6 +157,7 @@ export default function App() {
         }
         seed(world.rng || 1);
         registerCustomFormations(world);
+        try { if (world.user?.club && !world.user.objs?.length) makeObjectives(world); } catch (e) { console.warn(e); }
         setTimeout(() => discoverLogos(world), 4000);
         try {
           const moved = repairSchedule(world);

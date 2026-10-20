@@ -5,6 +5,7 @@ import { C, T, Card, Btn, Bar, Empty, Row, Icon } from '../ui/kit';
 import Page from '../ui/page';
 import { useG } from '../ui/ctx';
 import { acceptJob, jobOffers } from '../engine/sim';
+import { managerStyle } from '../engine/stories';
 import { NATION_BY_CODE } from '../data/nations';
 import { LEAGUE_BY_ID, LEAGUES } from '../data/leagues';
 import { teamName, teamFlag, isUserTeam } from '../engine/teams';
@@ -34,6 +35,12 @@ export default function CareerScreen() {
           <View key={l} style={cs.tile}><T muted size={11}>{l}</T><T display size={24}>{v}</T></View>
         ))}
       </View>
+      {(() => { const st = managerStyle(u); return (
+        <Card title="Образ в прессе" icon="mic-outline" onPress={() => G.push('press')}>
+          <T bold size={16} color={C.gold}>{st.ru}</T>
+          <T muted size={13} style={{ marginTop: 4 }}>{st.d}</T>
+        </Card>
+      ); })()}
       <Card title="Предложения работы" icon="briefcase-outline">
         {W.jobOffers.length ? (
           W.jobOffers.map((o, i) => {
@@ -138,3 +145,25 @@ const cs = StyleSheet.create({
   avatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: C.goldDim, borderWidth: 2, borderColor: C.gold, alignItems: 'center', justifyContent: 'center' },
   tile: { flex: 1, backgroundColor: C.card, borderRadius: 16, padding: 12, borderWidth: 1, borderColor: C.line },
 });
+
+export function SocialScreen() {
+  const G = useG();
+  const W = G.W;
+  const list = W.social || [];
+  return (
+    <Page title="Соцсети" sub="Фанаты, инсайдеры и слухи" back>
+      {list.length ? list.map((s, i) => (
+        <View key={i} style={{ backgroundColor: C.card, borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: s.tone > 0 ? C.accent + '44' : s.tone < 0 ? C.red + '44' : C.line }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: s.who.startsWith('@') && /[А-Я]/.test(s.who[1]) ? C.blue + '33' : C.gold + '33', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name={/[А-Я]/.test(s.who[1]) ? 'newspaper' : 'person'} size={13} color={/[А-Я]/.test(s.who[1]) ? C.blue : C.gold} />
+            </View>
+            <T bold size={13} style={{ flex: 1 }}>{s.who}</T>
+            <T muted size={11}>{fmtShort(s.y, s.d)}</T>
+          </View>
+          <T size={14} style={{ lineHeight: 19 }}>{s.text}</T>
+        </View>
+      )) : <Empty text="Пока тихо. Соцсети оживут с первыми матчами и трансферами." icon="chatbubbles-outline" />}
+    </Page>
+  );
+}

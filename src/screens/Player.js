@@ -154,6 +154,13 @@ export default function PlayerScreen({ id }) {
 
       {mine ? <DevCard W={W} p={p} onChange={() => G.refresh()} /> : null}
 
+      {mine && p.clauses ? (
+        <Card title="Условия трансфера" icon="document-attach-outline">
+          {p.clauses.sellOn ? <T size={13}>• {Math.round(p.clauses.sellOn.pct * 100)}% от будущей продажи — «{W.clubs[p.clauses.sellOn.club]?.name}»</T> : null}
+          {p.clauses.buyback ? <T size={13} style={{ marginTop: 4 }}>• «{W.clubs[p.clauses.buyback.club]?.name}» может выкупить игрока за {money(p.clauses.buyback.price)} до лета {p.clauses.buyback.until + 1}</T> : null}
+        </Card>
+      ) : null}
+
       <Card title="Статистика" icon="stats-chart-outline">
         <View style={{ flexDirection: 'row' }}>
           <Stat label="Матчи" value={p.st.app} />

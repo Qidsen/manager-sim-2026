@@ -128,11 +128,33 @@ export default function HomeScreen() {
             <Card><T muted center>{u.club || u.nation ? 'Ближайших матчей нет — жмите «Продолжить».' : 'Вы без работы. Предложения — в «Офис → Карьера».'}</T></Card>
           )}
 
+          {/* пресс-конференция и события */}
+          {W.press ? (
+            <Pressable onPress={() => { tap(); G.push('press'); }} style={[s.alert, { borderColor: C.gold + '88' }]}>
+              <Icon name="mic" size={20} color={C.gold} />
+              <View style={{ flex: 1 }}>
+                <T bold size={14}>Пресс-конференция</T>
+                <T muted size={12} numberOfLines={1}>{W.press.title}</T>
+              </View>
+              <Icon name="chevron-forward" size={18} color={C.muted} />
+            </Pressable>
+          ) : null}
+          {W.events?.length ? (
+            <Pressable onPress={() => { tap(); G.push('events'); }} style={[s.alert, { borderColor: C.orange + '88' }]}>
+              <Icon name="flash" size={20} color={C.orange} />
+              <View style={{ flex: 1 }}>
+                <T bold size={14}>{W.events[0].title}</T>
+                <T muted size={12}>Нужно ваше решение{W.events.length > 1 ? ` · ещё ${W.events.length - 1}` : ''}</T>
+              </View>
+              <Icon name="chevron-forward" size={18} color={C.muted} />
+            </Pressable>
+          ) : null}
+
           {/* ключевые цифры */}
           <View style={s.tiles}>
             {club ? <Tile icon="wallet" label="Бюджет" value={money(club.balance)} color={club.balance < 0 ? C.red : C.text} onPress={() => G.push('club')} /> : null}
             {pos ? <Tile icon="podium" label={u.target ? `Место · цель ${u.target}` : 'Место'} value={`${pos.pos}`} suffix={` из ${pos.total}`} color={u.target && pos.pos <= u.target ? C.accent : C.orange} onPress={() => G.push('comp', { id: `L:${club.league}` })} /> : null}
-            {club ? <Tile icon="business" label="Руководство" value={`${Math.round(u.conf)}%`} color={u.conf < 30 ? C.red : u.conf < 55 ? C.orange : C.accent} bar={u.conf} /> : null}
+            {club ? <Tile icon="business" label="Правление" value={`${Math.round(u.conf)}%`} color={u.conf < 30 ? C.red : u.conf < 55 ? C.orange : C.accent} bar={u.conf} onPress={() => G.push('board')} /> : null}
             {nat ? <Tile icon="flag" label="Федерация" value={`${Math.round(u.natConf)}%`} color={u.natConf < 30 ? C.red : C.accent} bar={u.natConf} onPress={() => G.push('nation')} /> : null}
           </View>
 
@@ -267,6 +289,7 @@ function TeamBlock({ W, id, me }) {
 }
 
 const s = StyleSheet.create({
+  alert: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.card, borderRadius: 16, padding: 14, borderWidth: 1, marginBottom: 10 },
   hero: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 22 },
   date: { color: C.muted, fontSize: 12, fontFamily: F.d7, letterSpacing: 1.3 },
   heroTitle: { color: C.text, fontSize: 34, fontFamily: F.d8, marginTop: 2, letterSpacing: 0.3 },
