@@ -88,16 +88,15 @@ export default function NewGameScreen({ onBack }) {
     body = (
       <View>
         <H>Выберите лигу</H>
-        {LEAGUES.map((L) => (
-          <Row key={L.id} onPress={() => setLeague(L.id)}>
-            <Text style={{ fontSize: 22 }}>{NATION_BY_CODE[L.country]?.flag}</Text>
-            <View style={{ flex: 1 }}>
-              <T bold>{L.name}</T>
-              <T muted size={12}>{NATION_BY_CODE[L.country]?.name} · {L.clubs.length} клубов</T>
-            </View>
-            <T muted>›</T>
-          </Row>
-        ))}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+          {LEAGUES.map((L) => (
+            <Pressable key={L.id} onPress={() => setLeague(L.id)} style={({ pressed }) => [{ flexBasis: '47%', flexGrow: 1, backgroundColor: C.card, borderRadius: 16, padding: 12, borderWidth: 1, borderColor: C.line }, pressed && { opacity: 0.8 }]}>
+              <Text style={{ fontSize: 28 }}>{NATION_BY_CODE[L.country]?.flag}</Text>
+              <T display size={17} numberOfLines={1} style={{ marginTop: 6 }}>{L.name}</T>
+              <T muted size={11}>{NATION_BY_CODE[L.country]?.name} · {L.clubs.length} клубов</T>
+            </Pressable>
+          ))}
+        </View>
       </View>
     );
   } else if (step === 1 && needClub) {
@@ -109,6 +108,7 @@ export default function NewGameScreen({ onBack }) {
         <H>{L.name}</H>
         {list.map(({ c, i }) => (
           <Row key={i} onPress={() => { setClub(i); setStep(needNation ? 2 : 3); }} style={club === i ? { backgroundColor: C.card2 } : null}>
+            <View style={{ width: 4, alignSelf: 'stretch', borderRadius: 2, backgroundColor: c[2] >= 85 ? C.gold : c[2] >= 75 ? C.accent : c[2] >= 65 ? C.blue : C.dim }} />
             <View style={{ flex: 1 }}>
               <T bold>{c[0]}</T>
               <T muted size={12}>Бюджет ~{money(Math.max(2e6, (c[2] - 45) ** 2 * 50000))} · стадион {c[3]} тыс.</T>

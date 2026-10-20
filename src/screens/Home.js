@@ -5,7 +5,7 @@ import { C, F, Btn, T, Card, Bar, FormDots, Icon, IconBtn, More, tap, thud } fro
 import { useG } from '../ui/ctx';
 import { advance } from '../engine/sim';
 import { fmtDate, fmtShort, money, seasonLabel } from '../engine/util';
-import { nextUserFixture, clubLeaguePos, lastResults, resultLetter, scoreText, userTeamIds } from '../engine/query';
+import { nextUserFixture, clubLeaguePos, lastResults, resultLetter, scoreText, userTeamIds, nextMatches } from '../engine/query';
 import { teamName, teamFlag, teamColor, isNat } from '../engine/teams';
 import { NATION_BY_CODE } from '../data/nations';
 import { isWindow } from '../engine/fixtures';
@@ -124,7 +124,7 @@ export default function HomeScreen() {
               </LinearGradient>
             </Pressable>
           ) : (
-            <Card><T muted center>{u.club || u.nation ? 'Ближайших матчей нет — жмите «Продолжить».' : 'Вы без работы. Предложения — в разделе «Карьера».'}</T></Card>
+            <Card><T muted center>{u.club || u.nation ? 'Ближайших матчей нет — жмите «Продолжить».' : 'Вы без работы. Предложения — в «Офис → Карьера».'}</T></Card>
           )}
 
           {/* ключевые цифры */}
@@ -134,6 +134,45 @@ export default function HomeScreen() {
             {club ? <Tile icon="business" label="Руководство" value={`${Math.round(u.conf)}%`} color={u.conf < 30 ? C.red : u.conf < 55 ? C.orange : C.accent} bar={u.conf} /> : null}
             {nat ? <Tile icon="flag" label="Федерация" value={`${Math.round(u.natConf)}%`} color={u.natConf < 30 ? C.red : C.accent} bar={u.natConf} onPress={() => G.push('nation')} /> : null}
           </View>
+
+          {/* быстрые действия */}
+          <View style={s.quick}>
+            {[
+              ['clipboard', 'Тактика', () => (u.club || u.nation) && G.push('tactics', { team: u.club || `n:${u.nation}` })],
+              ['calendar', 'Расписание', () => G.setTab('comps')],
+              ['swap-horizontal', 'Трансферы', () => G.setTab('transfers')],
+              ['mail', 'Почта', () => G.push('inbox')],
+            ].map(([ic, l, fn]) => (
+              <Pressable key={l} onPress={() => { tap(); fn(); }} style={({ pressed }) => [s.qBtn, pressed && { opacity: 0.75 }]}>
+                <Icon name={ic} size={20} color={C.gold} />
+                <Text style={s.qText}>{l}</Text>
+                {l === 'Почта' && unread ? <View style={s.qDot} /> : null}
+              </Pressable>
+            ))}
+          </View>
+
+          {(() => {
+            const ups = [];
+            for (const tid of userTeamIds(W)) for (const x of nextMatches(W, tid, 4)) ups.push({ ...x, team: tid });
+            const list = ups.sort((a, b) => a.day - b.day).filter((x) => !next || x.m !== next.m).slice(0, 3);
+            if (!list.length) return null;
+            return (
+              <Card title="Дальше по календарю" icon="calendar-outline" onPress={() => G.setTab('comps')} right={<More text="Все" />}>
+                {list.map(({ m, comp, team }, i) => {
+                  const home = m.h === team;
+                  const opp = home ? m.a : m.h;
+                  return (
+                    <View key={i} style={s.upRow}>
+                      <Text style={s.upDate}>{fmtShort(W.year, m.day)}</Text>
+                      <Text style={[s.ha, { color: home ? C.accent : C.blue }]}>{home ? 'Д' : 'Г'}</Text>
+                      <T size={14} style={{ flex: 1 }} numberOfLines={1}>{teamFlag(W, opp)} {teamName(W, opp)}</T>
+                      <T muted size={11} numberOfLines={1} style={{ maxWidth: 110 }}>{comp.kind === 'friendly' ? 'товарищеский' : comp.name}</T>
+                    </View>
+                  );
+                })}
+              </Card>
+            );
+          })()}
 
           {pos ? (
             <Card title="Турнирная таблица" icon="list" onPress={() => G.push('comp', { id: `L:${club.league}` })} right={<More text="Вся" />}>
@@ -248,5 +287,12 @@ const s = StyleSheet.create({
   resBadge: { width: 26, height: 26, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
   resLetter: { color: '#0A0F1C', fontSize: 14, fontFamily: F.d8 },
   score: { color: C.text, fontSize: 20, fontFamily: F.d8, fontVariant: ['tabular-nums'] },
+  quick: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  qBtn: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: 11, borderRadius: 14, backgroundColor: C.card, borderWidth: 1, borderColor: C.line },
+  qText: { color: C.text, fontSize: 11, fontWeight: '700' },
+  qDot: { position: 'absolute', top: 8, right: 14, width: 8, height: 8, borderRadius: 4, backgroundColor: C.red },
+  upRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7 },
+  upDate: { color: C.muted, fontFamily: F.d7, fontSize: 13, width: 52 },
+  ha: { fontFamily: F.d8, fontSize: 12, width: 14 },
   cta: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10, backgroundColor: 'rgba(10,15,28,0.94)', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.line },
 });

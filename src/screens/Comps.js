@@ -11,7 +11,7 @@ import { LEAGUES } from '../data/leagues';
 
 const ORDER = ['Чемпионаты', 'Национальные кубки', 'Международные клубные', 'Сборные', 'Товарищеские'];
 
-export default function CompsScreen() {
+export function CompsList() {
   const G = useG();
   const W = G.W;
   const mine = userTeamIds(W);
@@ -39,13 +39,41 @@ export default function CompsScreen() {
   };
 
   return (
-    <Page title="Турниры" sub={`Сезон ${seasonLabel(W.year)}`}>
+    <>
       {my.length ? <Card title="Ваши турниры" icon="star">{my.map(item)}</Card> : null}
       {ORDER.filter((k) => groups[k]?.length).map((k) => (
         <Card key={k} title={k} icon={{ 'Чемпионаты': 'list', 'Национальные кубки': 'ribbon', 'Международные клубные': 'globe', 'Сборные': 'flag', 'Товарищеские': 'people' }[k]}>{groups[k].map(item)}</Card>
       ))}
-      <Btn title="История турниров" icon="time" kind="ghost" onPress={() => G.push('history')} />
-    </Page>
+    </>
+  );
+}
+
+export function CompView({ id, initial, bare }) {
+  const G = useG();
+  const W = G.W;
+  const comp = W.comps[id];
+  const hasTable = comp?.stages.some((s) => s.t === 'rr');
+  const [tab, setTab] = useState(initial || (hasTable ? 'table' : 'matches'));
+  const [stageIdx, setStageIdx] = useState(comp ? comp.stages.length - 1 : 0);
+  if (!comp) return <Empty text="Турнир завершён и больше не доступен." />;
+  const stage = comp.stages[Math.min(stageIdx, comp.stages.length - 1)];
+  return (
+    <>
+      {bare ? null : (
+        <Seg
+          options={[...(hasTable ? [{ value: 'table', label: 'Таблица' }] : []), { value: 'matches', label: 'Матчи' }, { value: 'scorers', label: 'Бомбардиры' }]}
+          value={tab}
+          onChange={setTab}
+          style={{ marginBottom: 10 }}
+        />
+      )}
+      {comp.stages.length > 1 && tab !== 'scorers' ? (
+        <Chips options={comp.stages.map((s, i) => ({ value: i, label: s.name }))} value={Math.min(stageIdx, comp.stages.length - 1)} onChange={setStageIdx} style={{ marginBottom: 10 }} />
+      ) : null}
+      {tab === 'table' ? (stage.t === 'rr' ? <Tables W={W} comp={comp} stage={stage} /> : <Ties W={W} stage={stage} />) : null}
+      {tab === 'matches' ? (stage.t === 'ko' ? <Ties W={W} stage={stage} /> : <Rounds W={W} stage={stage} comp={comp} />) : null}
+      {tab === 'scorers' ? <Scorers W={W} comp={comp} /> : null}
+    </>
   );
 }
 
@@ -53,26 +81,9 @@ export function CompScreen({ id }) {
   const G = useG();
   const W = G.W;
   const comp = W.comps[id];
-  const hasTable = comp?.stages.some((s) => s.t === 'rr');
-  const [tab, setTab] = useState(hasTable ? 'table' : 'matches');
-  const [stageIdx, setStageIdx] = useState(comp ? comp.stages.length - 1 : 0);
-  if (!comp) return <Page title="Турнир" back><Empty text="Турнир завершён и больше не доступен." /></Page>;
-  const stage = comp.stages[Math.min(stageIdx, comp.stages.length - 1)];
-
   return (
-    <Page title={comp.name} sub={comp.done && comp.winner ? `🏆 ${teamName(W, comp.winner)}` : stage.name} back>
-      <Seg
-        options={[...(hasTable ? [{ value: 'table', label: 'Таблица' }] : []), { value: 'matches', label: 'Матчи' }, { value: 'scorers', label: 'Бомбардиры' }]}
-        value={tab}
-        onChange={setTab}
-        style={{ marginBottom: 10 }}
-      />
-      {comp.stages.length > 1 && tab !== 'scorers' ? (
-        <Chips options={comp.stages.map((s, i) => ({ value: i, label: s.name }))} value={Math.min(stageIdx, comp.stages.length - 1)} onChange={setStageIdx} style={{ marginBottom: 10 }} />
-      ) : null}
-      {tab === 'table' ? (stage.t === 'rr' ? <Tables W={W} comp={comp} stage={stage} /> : <Ties W={W} stage={stage} />) : null}
-      {tab === 'matches' ? (stage.t === 'ko' ? <Ties W={W} stage={stage} /> : <Rounds W={W} stage={stage} comp={comp} />) : null}
-      {tab === 'scorers' ? <Scorers W={W} comp={comp} /> : null}
+    <Page title={comp ? comp.name : 'Турнир'} sub={comp?.done && comp.winner ? `Победитель: ${teamName(W, comp.winner)}` : comp?.stages[comp.stages.length - 1]?.name} back>
+      <CompView id={id} />
     </Page>
   );
 }
@@ -80,7 +91,23 @@ export function CompScreen({ id }) {
 function Tables({ W, comp, stage }) {
   const G = useG();
   const zones = comp.kind === 'league' && comp.lid ? zoneFor(comp.lid) : null;
-  return stage.groups.map((g, gi) => {
+  const legend = comp.kind === 'league' && comp.lid ? legendFor(comp.lid) : [];
+  return (
+    <>
+      {stage.groups.map((g, gi) => tableCard(g, gi))}
+      {legend.length ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingHorizontal: 4, marginBottom: 10 }}>
+          {legend.map(([col, l]) => (
+            <View key={l} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: col }} />
+              <T muted size={11}>{l}</T>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </>
+  );
+  function tableCard(g, gi) {
     const rows = sortRows(g.rows, W);
     return (
       <Card key={gi} title={stage.groups.length > 1 || stage.groupNames ? compStageName(comp, stage, gi) : null}>
@@ -95,7 +122,7 @@ function Tables({ W, comp, stage }) {
           const me = isUserTeam(W, r.id);
           const zc = zones ? zones(i, rows.length) : null;
           return (
-            <Pressable key={r.id} onPress={() => G.push('team', { id: r.id })} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 0.5, borderBottomColor: C.line, backgroundColor: me ? C.accentDim : 'transparent' }}>
+            <Pressable key={r.id} onPress={() => G.push('team', { id: r.id })} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 0.5, borderBottomColor: C.line, backgroundColor: me ? C.goldDim : 'transparent', borderRadius: me ? 6 : 0 }}>
               <View style={{ width: 24, flexDirection: 'row', alignItems: 'center' }}>
                 {zc ? <View style={{ width: 3, height: 16, backgroundColor: zc, marginRight: 3, borderRadius: 2 }} /> : null}
                 <T size={12} muted>{i + 1}</T>
@@ -103,13 +130,25 @@ function Tables({ W, comp, stage }) {
               <T size={13} bold={me} style={{ flex: 1 }} numberOfLines={1}>{teamFlag(W, r.id) && r.id.startsWith('n:') ? `${teamFlag(W, r.id)} ` : ''}{teamName(W, r.id)}</T>
               {[r.p, r.w, r.d, r.l].map((v, k) => <T key={k} size={12} style={{ width: 24, textAlign: 'center' }}>{v}</T>)}
               <T size={12} style={{ width: 44, textAlign: 'center' }}>{r.gf}:{r.ga}</T>
-              <T size={13} bold style={{ width: 24, textAlign: 'center' }}>{r.pts}</T>
+              <Text style={{ width: 26, textAlign: 'center', color: me ? C.gold : C.text, fontFamily: F.d8, fontSize: 15 }}>{r.pts}</Text>
             </Pressable>
           );
         })}
       </Card>
     );
-  });
+  }
+}
+
+function legendFor(lid) {
+  const L = LEAGUES.find((l) => l.id === lid);
+  const out = [];
+  if (L.euro) out.push([C.blue, 'Лига чемпионов'], [C.orange, 'Лига Европы'], [C.accent, 'Лига конференций']);
+  if (L.lib) out.push([C.blue, 'Копа Либертадорес']);
+  if (L.afc) out.push([C.blue, 'Лига чемпионов АФК']);
+  if (L.concacaf) out.push([C.blue, 'Кубок КОНКАКАФ']);
+  if (L.up) out.push([C.accent, 'Повышение']);
+  if (L.down) out.push([C.red, 'Вылет']);
+  return out;
 }
 
 function zoneFor(lid) {

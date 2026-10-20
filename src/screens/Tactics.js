@@ -42,7 +42,7 @@ export function Pitch({ W, form, xi, selected, onSlot, width }) {
   );
 }
 
-export default function TacticsScreen({ team }) {
+export function TacticsBody({ team }) {
   const G = useG();
   const W = G.W;
   const { width } = useWindowDimensions();
@@ -83,7 +83,7 @@ export default function TacticsScreen({ team }) {
   const others = pool.map((id) => W.players[id]).filter((p) => p && !inXI.has(p.id) && !inBench.has(p.id)).sort((a, b) => b.ovr - a.ovr);
 
   return (
-    <Page title="Тактика" sub={teamName(W, team)} back>
+    <>
       <Chips options={FORMATION_NAMES} value={tac.form} onChange={(f) => { tac.form = f; if (tac.auto) tac.xi = null; G.refresh(); }} style={{ marginBottom: 12 }} />
       <Pitch W={W} form={tac.form} xi={lu.xi} selected={sel} onSlot={onSlot} width={Math.min(width - 28, 420)} />
       <T muted size={12} center style={{ marginVertical: 8 }}>
@@ -114,6 +114,15 @@ export default function TacticsScreen({ team }) {
           ))}
         </Card>
       ) : null}
+    </>
+  );
+}
+
+export default function TacticsScreen({ team }) {
+  const G = useG();
+  return (
+    <Page title="Тактика" sub={teamName(G.W, team)} back>
+      <TacticsBody team={team} />
     </Page>
   );
 }

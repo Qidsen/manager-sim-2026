@@ -15,7 +15,8 @@ import TitleScreen from './src/screens/Title';
 import NewGameScreen from './src/screens/NewGame';
 import HomeScreen from './src/screens/Home';
 import SquadScreen from './src/screens/Squad';
-import CompsScreen, { CompScreen } from './src/screens/Comps';
+import { CompScreen } from './src/screens/Comps';
+import SeasonScreen from './src/screens/Season';
 import TransfersScreen from './src/screens/Transfers';
 import MoreScreen from './src/screens/More';
 import PlayerScreen from './src/screens/Player';
@@ -31,9 +32,9 @@ import DatabaseScreen from './src/screens/Database';
 const TABS = [
   { key: 'home', label: 'Главная', icon: 'home' },
   { key: 'squad', label: 'Команда', icon: 'shirt' },
-  { key: 'comps', label: 'Турниры', icon: 'trophy' },
+  { key: 'comps', label: 'Сезон', icon: 'calendar' },
   { key: 'transfers', label: 'Трансферы', icon: 'swap-horizontal' },
-  { key: 'more', label: 'Ещё', icon: 'grid' },
+  { key: 'more', label: 'Офис', icon: 'briefcase' },
 ];
 
 const STACK = {
@@ -174,7 +175,7 @@ export default function App() {
         <View style={{ flex: 1 }}>
           {tab === 'home' && <HomeScreen />}
           {tab === 'squad' && <SquadScreen />}
-          {tab === 'comps' && <CompsScreen />}
+          {tab === 'comps' && <SeasonScreen />}
           {tab === 'transfers' && <TransfersScreen />}
           {tab === 'more' && <MoreScreen />}
           {Screen ? (

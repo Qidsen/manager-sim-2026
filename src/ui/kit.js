@@ -291,3 +291,30 @@ export const st = StyleSheet.create({
   field: { backgroundColor: C.bg2, color: C.text, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, borderWidth: 1, borderColor: C.line },
   section: { color: C.muted, fontSize: 12, fontFamily: F.d7, letterSpacing: 1.4, textTransform: 'uppercase', marginTop: 16, marginBottom: 6 },
 });
+
+// Вкладки разделов: подчёркнутые, прокручиваются по горизонтали
+export function SubTabs({ options, value, onChange, style }) {
+  return (
+    <View style={[{ borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.line }, style]}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 10 }}>
+        {options.map((o) => {
+          const on = o.value === value;
+          return (
+            <Pressable key={String(o.value)} onPress={() => { tap(); onChange(o.value); }} style={{ paddingHorizontal: 10, paddingTop: 10, paddingBottom: 9, alignItems: 'center' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                {o.icon ? <Icon name={o.icon} size={14} color={on ? C.gold : C.muted} /> : null}
+                <Text style={{ color: on ? C.text : C.muted, fontFamily: F.d7, fontSize: 15, letterSpacing: 0.4 }}>{o.label}</Text>
+                {o.badge ? (
+                  <View style={{ backgroundColor: C.red, borderRadius: 8, minWidth: 16, height: 16, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{o.badge}</Text>
+                  </View>
+                ) : null}
+              </View>
+              <View style={{ position: 'absolute', left: 10, right: 10, bottom: 0, height: 3, borderRadius: 2, backgroundColor: on ? C.gold : 'transparent' }} />
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}

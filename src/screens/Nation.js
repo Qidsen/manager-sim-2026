@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text } from 'react-native';
-import { C, T, Card, Btn, Bar, Seg, Chips, Stat, Empty } from '../ui/kit';
+import { View, Text, StyleSheet } from 'react-native';
+import { Bar, Btn, C, Card, Chips, Empty, F, Icon, Row, Seg, Stat, T } from '../ui/kit';
 import Page from '../ui/page';
 import { useG } from '../ui/ctx';
 import PlayerRow from '../ui/playerRow';
 import { NATION_BY_CODE } from '../data/nations';
-import { natIndex, callUp, teamName } from '../engine/teams';
-import { nextMatches, lastResults, scoreText, compsOfTeam } from '../engine/query';
+import { natIndex, callUp, teamName, teamFlag } from '../engine/teams';
+import { nextMatches, lastResults, scoreText, compsOfTeam, resultLetter } from '../engine/query';
 import { fmtShort, POSITIONS, POS_RU, LINE } from '../engine/util';
 import { resignNation } from '../engine/sim';
 
@@ -14,47 +14,84 @@ export default function NationScreen() {
   const G = useG();
   const W = G.W;
   const u = W.user;
-  if (!u.nation) return <Page title="Сборная" back><Empty text="Вы не тренируете сборную. Предложения появляются в разделе «Карьера»." /></Page>;
+  if (!u.nation) return <Page title="Сборная" back><Empty text="Вы не тренируете сборную. Предложения появляются в «Офис → Карьера»." icon="flag-outline" /></Page>;
   const n = NATION_BY_CODE[u.nation];
   const team = `n:${u.nation}`;
   const nat = W.nations[u.nation];
-  const next = nextMatches(W, team, 4);
-  const last = lastResults(W, team, 4);
+  const next = nextMatches(W, team, 5);
+  const last = lastResults(W, team, 5);
   const comps = compsOfTeam(W, team).filter((c) => c.kind !== 'friendly');
-  return (
-    <Page title={`${n.flag} ${n.name}`} sub={`Задача: ${u.natTarget}`} back>
-      <Card>
-        <View style={{ flexDirection: 'row' }}>
-          <Stat label="Сила" value={Math.round(nat.rep)} />
-          <Stat label="Вызвано" value={nat.squad.length} />
-          <Stat label="Доверие" value={`${Math.round(u.natConf)}%`} />
+  const row = (m, comp, played, i) => {
+    const home = m.h === team;
+    const opp = home ? m.a : m.h;
+    const L = played ? resultLetter(m, team) : null;
+    return (
+      <View key={i} style={ns.row}>
+        <Text style={ns.date}>{fmtShort(W.year, m.day)}</Text>
+        <Text style={{ fontSize: 15 }}>{teamFlag(W, opp)}</Text>
+        <View style={{ flex: 1 }}>
+          <T size={14} bold numberOfLines={1}>{home ? '' : '@ '}{teamName(W, opp)}</T>
+          <T muted size={11} numberOfLines={1}>{comp.kind === 'friendly' ? 'Товарищеский' : comp.name}</T>
         </View>
-        <Bar value={u.natConf} style={{ marginTop: 10 }} color={u.natConf < 30 ? C.red : C.accent} />
-      </Card>
-      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
-        <Btn small title="Вызов игроков" style={{ flex: 1 }} onPress={() => G.push('callup')} />
-        <Btn small kind="ghost" title="Тактика" style={{ flex: 1 }} onPress={() => G.push('tactics', { team })} />
+        {played ? (
+          <View style={[ns.score, { backgroundColor: L === 'W' ? C.accentDim : L === 'L' ? C.redDim : C.card3 }]}>
+            <Text style={[ns.scoreT, { color: L === 'W' ? C.accent : L === 'L' ? C.red : C.text }]}>{home ? `${m.hg}:${m.ag}` : `${m.ag}:${m.hg}`}</Text>
+          </View>
+        ) : null}
       </View>
-      <Card title="Автовызов" icon="sync-outline">
+    );
+  };
+  return (
+    <Page title={n.name} sub="Сборная" back>
+      <View style={ns.hero}>
+        <Text style={{ fontSize: 46 }}>{n.flag}</Text>
+        <View style={{ flex: 1 }}>
+          <T muted size={11}>ЗАДАЧА ФЕДЕРАЦИИ</T>
+          <T bold size={15} style={{ marginTop: 2 }}>{u.natTarget}</T>
+        </View>
+      </View>
+      <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+        <View style={ns.tile}><T muted size={11}>Сила</T><Text style={ns.tileV}>{Math.round(nat.rep)}</Text></View>
+        <View style={ns.tile}><T muted size={11}>Вызвано</T><Text style={ns.tileV}>{nat.squad.length}<Text style={{ color: C.muted, fontSize: 15 }}>/26</Text></Text></View>
+        <View style={ns.tile}>
+          <T muted size={11}>Доверие</T>
+          <Text style={[ns.tileV, { color: u.natConf < 30 ? C.red : C.accent }]}>{Math.round(u.natConf)}%</Text>
+        </View>
+      </View>
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+        <Btn small title="Вызов" icon="person-add" style={{ flex: 1 }} onPress={() => G.push('callup')} />
+        <Btn small kind="ghost" title="Тактика" icon="clipboard" style={{ flex: 1 }} onPress={() => G.push('tactics', { team })} />
+      </View>
+      <Card title="Вызов перед окнами" icon="sync-outline">
         <Seg options={[{ value: false, label: 'Я сам' }, { value: true, label: 'Автоматически' }]} value={!!u.autoCall} onChange={(v) => { u.autoCall = v; if (v) callUp(W, u.nation); G.refresh(); }} />
-        <T muted size={12} style={{ marginTop: 6 }}>При автовызове состав обновляется перед каждым окном сборных.</T>
       </Card>
+      {next.length ? <Card title="Ближайшие матчи" icon="calendar-outline">{next.map(({ m, comp }, i) => row(m, comp, false, i))}</Card> : null}
+      {last.length ? <Card title="Результаты" icon="time-outline">{last.map(({ m, comp }, i) => row(m, comp, true, i))}</Card> : null}
       {comps.length ? (
         <Card title="Турниры" icon="trophy-outline">
           {comps.map((c) => (
-            <Btn key={c.id} small kind="ghost" title={c.name} style={{ marginBottom: 6 }} onPress={() => G.push('comp', { id: c.id })} />
+            <Row key={c.id} onPress={() => G.push('comp', { id: c.id })}>
+              <Icon name={c.done ? 'trophy' : 'flag'} size={17} color={c.done ? C.gold : C.blue} />
+              <T size={14} style={{ flex: 1 }} numberOfLines={1}>{c.name}</T>
+              <Icon name="chevron-forward" size={16} color={C.dim} />
+            </Row>
           ))}
         </Card>
       ) : null}
-      <Card title="Матчи" icon="calendar-outline">
-        {last.map(({ m }, i) => <T key={`l${i}`} size={13} style={{ paddingVertical: 3 }}>{fmtShort(W.year, m.day)} · {teamName(W, m.h)} {scoreText(m)} {teamName(W, m.a)}</T>)}
-        {next.map(({ m, comp }, i) => <T key={`n${i}`} size={13} muted style={{ paddingVertical: 3 }}>{fmtShort(W.year, m.day)} · {teamName(W, m.h)} — {teamName(W, m.a)} · {comp.kind === 'friendly' ? 'товарищеский' : comp.name}</T>)}
-        {!last.length && !next.length ? <T muted>Матчей нет</T> : null}
-      </Card>
-      <Btn title="Уйти из сборной" kind="danger" onPress={() => G.dialog({ title: 'Покинуть сборную?', text: 'Вы перестанете быть тренером сборной.', buttons: [{ title: 'Уйти', kind: 'danger', onPress: () => { resignNation(W); G.pop(); G.refresh(); } }, { title: 'Отмена', kind: 'ghost' }] })} />
+      <Btn title="Уйти из сборной" kind="danger" small onPress={() => G.dialog({ title: 'Покинуть сборную?', text: 'Вы перестанете быть тренером сборной.', buttons: [{ title: 'Уйти', kind: 'danger', onPress: () => { resignNation(W); G.pop(); G.refresh(); } }, { title: 'Отмена', kind: 'ghost' }] })} />
     </Page>
   );
 }
+
+const ns = StyleSheet.create({
+  hero: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: C.card, borderRadius: 18, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: C.line },
+  tile: { flex: 1, backgroundColor: C.card, borderRadius: 16, padding: 12, borderWidth: 1, borderColor: C.line },
+  tileV: { color: C.text, fontFamily: F.d8, fontSize: 24, marginTop: 2 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.line },
+  date: { color: C.muted, fontFamily: F.d7, fontSize: 13, width: 50 },
+  score: { borderRadius: 9, paddingHorizontal: 9, paddingVertical: 3, minWidth: 46, alignItems: 'center' },
+  scoreT: { fontFamily: F.d8, fontSize: 16 },
+});
 
 export function CallupScreen() {
   const G = useG();

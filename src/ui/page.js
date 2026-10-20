@@ -3,7 +3,7 @@ import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { C, F, IconBtn } from './kit';
 import { useG } from './ctx';
 
-export default function Page({ title, sub, back, right, children, scroll = true, pad = true, bottomSpace = 40 }) {
+export default function Page({ title, sub, back, right, children, scroll = true, pad = true, bottomSpace = 40, tabs }) {
   const G = useG();
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
@@ -15,6 +15,7 @@ export default function Page({ title, sub, back, right, children, scroll = true,
         </View>
         {right}
       </View>
+      {tabs || null}
       {scroll ? (
         <ScrollView contentContainerStyle={pad ? { padding: 14, paddingBottom: bottomSpace } : { paddingBottom: bottomSpace }} keyboardShouldPersistTaps="handled">
           {children}
