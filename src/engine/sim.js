@@ -398,7 +398,7 @@ function dailyTick(W) {
         if (userClub && p.club === userClub.id) mail(W, `${p.n} восстановился`, `${p.n} вернулся к тренировкам после травмы.`);
       }
     } else if (p.fit < 100) {
-      p.fit = Math.min(100, Math.round(p.fit + 6.5 - int * 1.2 + planRecovery(W, p)));
+      p.fit = Math.min(100, Math.round(p.fit + 7.5 - int * 1.2 + planRecovery(W, p)));
     }
   }
   if (day % 7 === 4) weekly(W);

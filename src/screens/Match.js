@@ -45,6 +45,7 @@ export default function MatchScreen() {
   const [speed, setSpeed] = useState(2);
   const [subOut, setSubOut] = useState(null);
   const [panel, setPanel] = useState(null); // 'subs' | 'tactic'
+  const [view, setView] = useState('feed');
   const [showPitch, setShowPitch] = useState(true);
   const { width: winW } = useWindowDimensions();
   const finalized = useRef(false);
@@ -279,14 +280,7 @@ export default function MatchScreen() {
         ) : null}
         <View style={st.statRow}>
           <StatLine label="Владение" a={`${pct0}%`} b={`${100 - pct0}%`} va={pct0} vb={100 - pct0} me={me} />
-          <StatLine label="Удары (в створ)" a={`${s.shots[0]} (${s.sot[0]})`} b={`${s.shots[1]} (${s.sot[1]})`} va={s.shots[0]} vb={s.shots[1]} me={me} />
-          {phase === 'post' ? (
-            <>
-              <StatLine label="Угловые" a={`${s.corners[0]}`} b={`${s.corners[1]}`} va={s.corners[0]} vb={s.corners[1]} me={me} />
-              <StatLine label="Фолы" a={`${(s.fouls || [0, 0])[0]}`} b={`${(s.fouls || [0, 0])[1]}`} va={(s.fouls || [0, 0])[0]} vb={(s.fouls || [0, 0])[1]} me={me} />
-              <StatLine label="Офсайды" a={`${(s.offs || [0, 0])[0]}`} b={`${(s.offs || [0, 0])[1]}`} va={(s.offs || [0, 0])[0]} vb={(s.offs || [0, 0])[1]} me={me} />
-            </>
-          ) : null}
+          <StatLine label="xG · удары" a={`${(s.xg || [0, 0])[0].toFixed(2)} · ${s.shots[0]}`} b={`${s.shots[1]} · ${(s.xg || [0, 0])[1].toFixed(2)}`} va={(s.xg || [0, 0])[0]} vb={(s.xg || [0, 0])[1]} me={me} />
         </View>
       </View>
       <Bar value={s.min} max={s.phase === 'et' || s.min > 90 ? 120 : 90} color={C.gold} height={3} style={{ borderRadius: 0 }} />
@@ -319,6 +313,7 @@ export default function MatchScreen() {
               <Text style={[st.bigRate, { color: C.gold }]}>{(s.rating[best[0]] || 0).toFixed(1)}</Text>
             </LinearGradient>
           ) : null}
+          <FullStats W={W} s={s} me={me} />
           <Card title="Оценки ваших игроков" icon="stats-chart">
             {mine.map((p) => {
               const r = s.rating[p.id] || 6;
@@ -400,6 +395,16 @@ export default function MatchScreen() {
           </ScrollView>
         </View>
       ) : null}
+      {!panel ? (
+        <View style={{ paddingHorizontal: 14, paddingTop: 8 }}>
+          <Seg options={[{ value: 'feed', label: 'Лента' }, { value: 'stats', label: 'Статистика' }]} value={view} onChange={setView} />
+        </View>
+      ) : null}
+      {view === 'stats' && !panel ? (
+        <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 110 }}>
+          <FullStats W={W} s={s} me={me} />
+        </ScrollView>
+      ) : (
       <FlatList
         data={s.ev.slice(0, Math.max(1, shown)).slice(-80).reverse()}
         keyExtractor={(_, i) => String(Math.max(1, shown) - i)}
@@ -420,6 +425,7 @@ export default function MatchScreen() {
           );
         }}
       />
+      )}
       <View style={st.controls}>
         <Pressable onPress={() => { tap(); setPanel(null); setRunning(!running); }} style={[st.play, s.done && { opacity: 0.4 }]} disabled={s.done}>
           <Icon name={running ? 'pause' : 'play'} size={26} color="#1A1206" />
@@ -440,6 +446,49 @@ function CtrlBtn({ icon, label, onPress, active }) {
       <Icon name={icon} size={18} color={active ? C.gold : C.text} />
       <Text style={[st.ctrlText, active && { color: C.gold }]} numberOfLines={1}>{label}</Text>
     </Pressable>
+  );
+}
+
+// Полная статистика матча
+function FullStats({ W, s, me }) {
+  const z = (k) => s[k] || [0, 0];
+  const tot = s.poss[0] + s.poss[1] || 1;
+  const p0 = Math.round((s.poss[0] / tot) * 100);
+  // передачи и точность — от владения и паса игроков на поле
+  const passStats = (si) => {
+    const sd = si === 0 ? s.h : s.a;
+    const ids = [...sd.played];
+    const avgPas = ids.length ? ids.reduce((a, id) => a + (W.players[id]?.a.pas || 60), 0) / ids.length : 60;
+    const share = si === 0 ? p0 / 100 : 1 - p0 / 100;
+    const mins = Math.max(1, Math.min(s.min, 120));
+    const passes = Math.round(share * 9.6 * mins * (0.85 + sd.tac.tempo * 0.08));
+    const acc = Math.round(Math.max(62, Math.min(93, 70 + (avgPas - 60) * 0.55 + (share - 0.5) * 20)));
+    return { passes, acc };
+  };
+  const ps = [passStats(0), passStats(1)];
+  const rows = [
+    ['Ожидаемые голы (xG)', z('xg')[0].toFixed(2), z('xg')[1].toFixed(2), z('xg')[0], z('xg')[1]],
+    ['Владение', `${p0}%`, `${100 - p0}%`, p0, 100 - p0],
+    ['Удары', s.shots[0], s.shots[1], s.shots[0], s.shots[1]],
+    ['Удары в створ', s.sot[0], s.sot[1], s.sot[0], s.sot[1]],
+    ['Большие моменты', z('big')[0], z('big')[1], z('big')[0], z('big')[1]],
+    ['Сейвы', z('saves')[0], z('saves')[1], z('saves')[0], z('saves')[1]],
+    ['Передачи', ps[0].passes, ps[1].passes, ps[0].passes, ps[1].passes],
+    ['Точность передач', `${ps[0].acc}%`, `${ps[1].acc}%`, ps[0].acc, ps[1].acc],
+    ['Угловые', s.corners[0], s.corners[1], s.corners[0], s.corners[1]],
+    ['Офсайды', z('offs')[0], z('offs')[1], z('offs')[0], z('offs')[1]],
+    ['Фолы', z('fouls')[0], z('fouls')[1], z('fouls')[0], z('fouls')[1]],
+    ['Жёлтые карточки', z('ycN')[0], z('ycN')[1], z('ycN')[0], z('ycN')[1]],
+    ['Красные карточки', z('rcN')[0], z('rcN')[1], z('rcN')[0], z('rcN')[1]],
+  ];
+  return (
+    <Card title="Статистика матча" icon="stats-chart">
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 }}>
+        <T bold size={13} color={me === 0 ? C.gold : C.text} numberOfLines={1} style={{ flex: 1 }}>{s.h.short || s.h.name}</T>
+        <T bold size={13} color={me === 1 ? C.gold : C.text} numberOfLines={1} style={{ flex: 1, textAlign: 'right' }}>{s.a.short || s.a.name}</T>
+      </View>
+      {rows.map(([l, a, b, va, vb]) => <StatLine key={l} label={l} a={`${a}`} b={`${b}`} va={+va || 0} vb={+vb || 0} me={me} />)}
+    </Card>
   );
 }
 

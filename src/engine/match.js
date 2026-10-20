@@ -7,8 +7,8 @@ export function available(p) {
   return p && p.inj <= 0 && !(p.ban > 0);
 }
 
-function condFactor(fit) {
-  return fit >= 85 ? 1 : fit >= 70 ? 0.97 : fit >= 55 ? 0.9 : 0.8;
+export function condFactor(fit) {
+  return fit >= 80 ? 1 : fit >= 65 ? 0.98 : fit >= 50 ? 0.94 : 0.88;
 }
 
 export function autoLineup(W, pool, form, opts = {}) {
@@ -45,7 +45,7 @@ export function resolveLineup(W, pool, tactic) {
   if (tactic.auto || !tactic.xi) return autoLineup(W, pool, tactic.form);
   const slots = FORMATIONS[tactic.form];
   const inPool = new Set(pool);
-  const xi = tactic.xi.map((id) => (id && inPool.has(id) && available(W.players[id]) ? id : null));
+  const xi = tactic.xi.map((id) => (id && inPool.has(id) && available(W.players[id]) && !(tactic.rotate !== false && W.players[id].fit < 62) ? id : null));
   const used = new Set(xi.filter(Boolean));
   const cand = pool.map((id) => W.players[id]).filter((p) => available(p) && !used.has(p.id));
   for (let i = 0; i < 11; i++) {
@@ -143,7 +143,7 @@ export function createMatch(W, home, away, opts = {}) {
   };
   const S = {
     h: mk(home), a: mk(away), min: 0, score: [0, 0], ev: [], goals: [], poss: [1, 1], shots: [0, 0], sot: [0, 0], corners: [0, 0],
-    rating: {}, neutral: !!opts.neutral, ko: opts.ko || null, phase: 'play', pens: null, verbose: !!opts.verbose, done: false, cache: null, cacheMin: -9,
+    rating: {}, xg: [0, 0], big: [0, 0], saves: [0, 0], ycN: [0, 0], rcN: [0, 0], neutral: !!opts.neutral, ko: opts.ko || null, phase: 'play', pens: null, verbose: !!opts.verbose, done: false, cache: null, cacheMin: -9,
   };
   for (const side of [S.h, S.a]) for (const id of side.xi) if (id) S.rating[id] = 6.2;
   if (S.verbose) S.ev.push({ min: 0, side: -1, text: 'Стартовый свисток! Матч начался.' });
@@ -293,7 +293,7 @@ const toward = (att, v) => (att === 0 ? v : 1 - v);
 
 // Общая модель вероятностей: используется и в трансляции, и в быстром расчёте
 export function edge(A, D) {
-  return Math.exp(clamp((A.A - D.D) / 44, -0.65, 0.65));
+  return Math.exp(clamp((A.A - D.D) / 36, -0.8, 0.8));
 }
 export function rates(ratio, tempo) {
   return { pen: 0.0034 * ratio, corner: 0.088 * Math.sqrt(ratio), fk: 0.011 * ratio, open: 0.172 * ratio * tempo };
@@ -331,6 +331,12 @@ function shotOutcomeInner(W, S, att, shooter, quality, how) {
   const ratio = edge(A, Dd);
   const onT = how === 'pen' ? 0.9 : onTarget(sp.a.sho, gkv);
   const gy = 0.5 + (rand() - 0.5) * 0.22;
+  const xgv = how === 'pen' ? 0.76 : clamp(onT * convert(sp.a.sho, gkv, ratio) * quality * 0.92, 0.02, 0.8);
+  S.xg ||= [0, 0];
+  S.big ||= [0, 0];
+  S.xg[att] += xgv;
+  if (xgv >= 0.2) S.big[att]++;
+  S.lastXg = xgv;
   if (rand() < onT) {
     S.sot[att]++;
     const base = how === 'pen' ? penConvert(sp.a.sho, gkv) / 0.9 : convert(sp.a.sho, gkv, ratio) * quality;
@@ -347,6 +353,8 @@ function shotOutcomeInner(W, S, att, shooter, quality, how) {
       return;
     }
     if (gkId) addRating(S, gkId, how === 'pen' ? 0.8 : 0.18);
+    S.saves ||= [0, 0];
+    S.saves[1 - att]++;
     // рикошет в свои ворота
     if (how === 'open' && rand() < 0.012) {
       const d = pickLine(W, opp, ['D']);
@@ -454,8 +462,9 @@ export function stepMinute(W, S) {
     setBall(S, att, toward(att, 0.89), 0.5, 'pen', taker?.id);
     if (fouler && rand() < 0.2) {
       const fp = W.players[fouler];
-      if (opp.yc[fouler]) { log(S, 1 - att, fill(T.red[1], { p: fp.n }), { type: 'red' }); fp.ban = (fp.ban || 0) + 1; addRating(S, fouler, -1.2); removePlayer(S, opp, fouler); }
-      else { opp.yc[fouler] = 1; addRating(S, fouler, -0.3); log(S, 1 - att, `${fp.n} получает жёлтую за фол.`, { type: 'yellow' }); }
+      S.ycN ||= [0, 0]; S.rcN ||= [0, 0];
+      if (opp.yc[fouler]) { S.rcN[1 - att]++; S.ycN[1 - att]++; log(S, 1 - att, fill(T.red[1], { p: fp.n }), { type: 'red' }); fp.ban = (fp.ban || 0) + 1; addRating(S, fouler, -1.2); removePlayer(S, opp, fouler); }
+      else { S.ycN[1 - att]++; opp.yc[fouler] = 1; addRating(S, fouler, -0.3); log(S, 1 - att, `${fp.n} получает жёлтую за фол.`, { type: 'yellow' }); }
     }
     if (taker) shotOutcome(W, S, att, taker.id, 1, 'pen');
   } else if (r < R.pen + R.corner) {
@@ -485,7 +494,15 @@ export function stepMinute(W, S) {
     // обычная игра: мяч в середине/на подступах
     const depth = 0.38 + rand() * 0.34 + (A.A - Dd.D) / 200;
     setBall(S, att, toward(att, depth), 0.12 + rand() * 0.76, 'play', null);
-    if (rand() < 0.022) {
+    if (rand() < 0.035) {
+      // удар издали: чаще мимо или в блок
+      S.shots[att]++;
+      S.xg ||= [0, 0];
+      S.xg[att] += 0.03;
+      const sh2 = pickLine(W, side, ['M', 'A']);
+      setBall(S, att, toward(att, 0.99), rand() < 0.5 ? 0.3 : 0.7, 'miss', sh2);
+      if (S.verbose && sh2 && chance(0.4)) log(S, att, `${shortName(W.players[sh2])} пробует издали — мимо.`, { type: 'miss' });
+    } else if (rand() < 0.045) {
       S.offs[att]++;
       if (S.verbose && chance(0.5)) {
         const st = pickLine(W, side, ['A']);
@@ -505,17 +522,22 @@ export function stepMinute(W, S) {
       const f = pickFouler(W, sd);
       if (f) {
         const p = W.players[f];
-        if (rand() < 0.035) {
+        S.ycN ||= [0, 0]; S.rcN ||= [0, 0];
+        if (rand() < 0.012) {
+          S.rcN[si]++;
           log(S, si, fill(T.red[0], { p: p.n }), { type: 'red' });
           addRating(S, f, -1.5);
           p.ban = (p.ban || 0) + 2;
           removePlayer(S, sd, f);
         } else if (sd.yc[f]) {
+          S.rcN[si]++;
+          S.ycN[si]++;
           log(S, si, fill(T.red[1], { p: p.n }), { type: 'red' });
           addRating(S, f, -1.2);
           p.ban = (p.ban || 0) + 1;
           removePlayer(S, sd, f);
         } else {
+          S.ycN[si]++;
           sd.yc[f] = 1;
           addRating(S, f, -0.3);
           log(S, si, fill(pick(T.yellow), { p: p.n }), { type: 'yellow' });

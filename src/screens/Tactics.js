@@ -121,6 +121,17 @@ export function TacticsBody({ team }) {
         <Btn small title={tac.auto ? '✓ Автосостав включён' : 'Включить автосостав'} kind={tac.auto ? 'primary' : 'ghost'} style={{ flex: 1 }} onPress={() => { tac.auto = !tac.auto; if (tac.auto) { tac.xi = null; tac.bench = null; } G.refresh(); }} />
         <Btn small title="Лучшие 11" kind="ghost" style={{ flex: 1 }} onPress={() => { const a = autoLineup(W, pool, tac.form); commit(a.xi, a.bench); }} />
       </View>
+      {!tac.auto ? (
+        <Card style={{ paddingVertical: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <T bold size={14}>Авто-ротация уставших</T>
+              <T muted size={12}>Игроки со свежестью ниже 62% автоматически отдыхают — их место займут лучшие из свежих.</T>
+            </View>
+            <Seg options={[{ value: true, label: 'Вкл' }, { value: false, label: 'Выкл' }]} value={tac.rotate !== false} onChange={(v) => { tac.rotate = v; G.refresh(); }} style={{ width: 120 }} />
+          </View>
+        </Card>
+      ) : null}
       <Card title="Установки" icon="options-outline">
         <T muted size={12} style={{ marginBottom: 6 }}>Настрой: {MENTALITY[tac.ment]}</T>
         <Seg options={MENTALITY.map((m, i) => ({ value: i, label: ['−−', '−', '=', '+', '++'][i] }))} value={tac.ment} onChange={(v) => { tac.ment = v; G.refresh(); }} />
