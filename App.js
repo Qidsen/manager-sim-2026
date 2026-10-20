@@ -7,9 +7,11 @@ import { C, F, Btn, Icon, tap } from './src/ui/kit';
 import { useFonts } from 'expo-font';
 import { repairSchedule } from './src/engine/sim';
 import { registerCustomFormations } from './src/engine/util';
+import { loadLogos, discoverLogos } from './src/logos';
 import { logError } from './src/diag';
 import DiagScreen from './src/screens/Diag';
 import NegotiateScreen from './src/screens/Negotiate';
+import ScoutingScreen from './src/screens/Scouting';
 import { saveGame } from './src/storage';
 import { seed } from './src/engine/rng';
 import TitleScreen from './src/screens/Title';
@@ -54,6 +56,7 @@ const STACK = {
   database: DatabaseScreen,
   diag: DiagScreen,
   negotiate: NegotiateScreen,
+  scouting: ScoutingScreen,
 };
 
 export default function App() {
@@ -92,6 +95,10 @@ export default function App() {
     },
     [W]
   );
+
+  useEffect(() => {
+    loadLogos();
+  }, []);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (st) => {
@@ -142,6 +149,7 @@ export default function App() {
         }
         seed(world.rng || 1);
         registerCustomFormations(world);
+        setTimeout(() => discoverLogos(world), 4000);
         try {
           const moved = repairSchedule(world);
           if (moved) console.log('перенесено матчей', moved);

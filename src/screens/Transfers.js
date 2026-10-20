@@ -35,7 +35,7 @@ export default function TransfersScreen() {
     const out = [];
     for (const id in W.players) {
       const p = W.players[id];
-      if (p.club === my.id || p.aca) continue;
+      if (p.club === my.id || p.aca || p.pros) continue;
       if (fa && !p.fa) continue;
       if (pos !== 'ALL' && p.pos !== pos) continue;
       if (p.age > age || p.ovr < minOvr) continue;
@@ -59,6 +59,14 @@ export default function TransfersScreen() {
           <T muted size={11}>Со свободными агентами можно договариваться в любое время</T>
         </View>
       </View>
+      <Pressable onPress={() => { tap(); G.push('scouting'); }} style={[st.window, { backgroundColor: C.card, borderColor: C.line }]}>
+        <Icon name="eye" size={18} color={C.gold} />
+        <View style={{ flex: 1 }}>
+          <T bold size={14}>Скаутская сеть</T>
+          <T muted size={11}>{(W.scouting?.scouts?.length || 0)} скаут(ов) · отчётов: {Object.keys(W.scouting?.reports || {}).length}{W.scouting?.unseen ? ` · новых: ${W.scouting.unseen}` : ''}</T>
+        </View>
+        <Icon name="chevron-forward" size={18} color={C.muted} />
+      </Pressable>
 
       <Chips
         options={[

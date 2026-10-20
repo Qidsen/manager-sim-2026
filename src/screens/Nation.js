@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Crest from '../ui/Crest';
 import { View, Text, StyleSheet } from 'react-native';
 import { Bar, Btn, C, Card, Chips, Empty, F, Icon, Row, Seg, Stat, T } from '../ui/kit';
 import Page from '../ui/page';
@@ -28,7 +29,7 @@ export default function NationScreen() {
     return (
       <View key={i} style={ns.row}>
         <Text style={ns.date}>{fmtShort(W.year, m.day)}</Text>
-        <Text style={{ fontSize: 15 }}>{teamFlag(W, opp)}</Text>
+        <Crest W={W} id={opp} size={18} />
         <View style={{ flex: 1 }}>
           <T size={14} bold numberOfLines={1}>{home ? '' : '@ '}{teamName(W, opp)}</T>
           <T muted size={11} numberOfLines={1}>{comp.kind === 'friendly' ? 'Товарищеский' : comp.name}</T>

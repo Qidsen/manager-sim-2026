@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import Crest from '../ui/Crest';
 import { View, Text, Pressable } from 'react-native';
 import { C, F, T, Seg, Chips, Card, Row, Empty, FormDots, Btn, Icon } from '../ui/kit';
 import Page from '../ui/page';
@@ -127,7 +128,8 @@ function Tables({ W, comp, stage }) {
                 {zc ? <View style={{ width: 3, height: 16, backgroundColor: zc, marginRight: 3, borderRadius: 2 }} /> : null}
                 <T size={12} muted>{i + 1}</T>
               </View>
-              <T size={13} bold={me} style={{ flex: 1 }} numberOfLines={1}>{teamFlag(W, r.id) && r.id.startsWith('n:') ? `${teamFlag(W, r.id)} ` : ''}{teamName(W, r.id)}</T>
+              <Crest W={W} id={r.id} size={18} style={{ marginRight: 6 }} />
+              <T size={13} bold={me} style={{ flex: 1 }} numberOfLines={1}>{teamName(W, r.id)}</T>
               {[r.p, r.w, r.d, r.l].map((v, k) => <T key={k} size={12} style={{ width: 24, textAlign: 'center' }}>{v}</T>)}
               <T size={12} style={{ width: 44, textAlign: 'center' }}>{r.gf}:{r.ga}</T>
               <Text style={{ width: 26, textAlign: 'center', color: me ? C.gold : C.text, fontFamily: F.d8, fontSize: 15 }}>{r.pts}</Text>
@@ -180,7 +182,9 @@ function MatchRow({ W, m, showDate = true }) {
     <Pressable onPress={open} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 7, gap: 6, borderBottomWidth: 0.5, borderBottomColor: C.line, backgroundColor: me ? C.accentDim : 'transparent' }}>
       {showDate ? <T muted size={11} style={{ width: 42 }}>{fmtShort(W.year, m.day)}</T> : null}
       <T size={13} style={{ flex: 1, textAlign: 'right' }} numberOfLines={1}>{teamName(W, m.h)}</T>
+      <Crest W={W} id={m.h} size={16} />
       <T bold size={13} style={{ minWidth: 46, textAlign: 'center' }}>{scoreText(m)}</T>
+      <Crest W={W} id={m.a} size={16} />
       <T size={13} style={{ flex: 1 }} numberOfLines={1}>{teamName(W, m.a)}</T>
     </Pressable>
   );

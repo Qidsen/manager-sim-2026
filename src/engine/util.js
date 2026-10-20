@@ -182,3 +182,36 @@ export function fmtShort(year, day) {
 }
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const seasonLabel = (y) => `${y}/${String((y + 1) % 100).padStart(2, '0')}`;
+
+// ---------- динамический рейтинг (как Dynamic OVR в FC 27) ----------
+// Форма (последние оценки), мораль и игровой тонус сдвигают рейтинг на -6…+4.
+export function dynParts(p) {
+  const form = clamp(p.frm || 0, -3, 3);
+  const mor = clamp(((p.mor ?? 70) - 70) / 12, -4, 2.5) * 0.5;
+  const shp = clamp(((p.shp ?? 80) - 75) / 10, -4, 2.5) * 0.6;
+  return { form, mor, shp, total: clamp(form + mor + shp, -6, 4) };
+}
+export const dynDelta = (p) => dynParts(p).total;
+export const dynOvr = (p) => Math.round(clamp(p.ovr + dynDelta(p), 1, 99));
+
+// ---------- профили роста (Growth Profiles) ----------
+// g — скорость роста по возрастам (≤20, 21–23, 24–27), peak — до какого возраста держит пик, dec — скорость спада, v — разброс
+export const GROWTH = {
+  early: { ru: 'Ранний расцвет', d: 'Стремительно растёт в юности, пик в 24–27, раньше начинает сдавать.', g: [1.4, 1.15, 0.6], peak: 27, dec: 1.3, v: 1 },
+  std: { ru: 'Классический', d: 'Обычная кривая: рост до 25–26, пик до 29.', g: [1, 1, 1], peak: 29, dec: 1, v: 1 },
+  late: { ru: 'Поздний расцвет', d: 'Медленно раскрывается, но прибавляет до 30 лет.', g: [0.65, 0.95, 1.7], peak: 30, dec: 0.9, v: 1 },
+  long: { ru: 'Долгожитель', d: 'Долго держит уровень, медленно стареет.', g: [0.95, 1, 1], peak: 31, dec: 0.5, v: 0.8 },
+  burst: { ru: 'Взрывной', d: 'Растёт скачками — может выстрелить, а может застрять.', g: [1.1, 1.1, 1.1], peak: 28, dec: 1.1, v: 2.4 },
+  steady: { ru: 'Стабильный', d: 'Ровный предсказуемый рост без сюрпризов.', g: [0.95, 0.95, 0.95], peak: 29, dec: 0.8, v: 0.35 },
+};
+const GP_TABLE = ['std', 'std', 'std', 'std', 'std', 'std', 'std', 'std', 'early', 'early', 'early', 'late', 'late', 'late', 'long', 'long', 'burst', 'burst', 'steady', 'steady'];
+export function growthKey(p) {
+  if (!p.gp || !GROWTH[p.gp]) p.gp = GP_TABLE[Math.abs((p.id * 2654435761) | 0) % GP_TABLE.length];
+  return p.gp;
+}
+export const growthOf = (p) => GROWTH[growthKey(p)];
+
+// Риск травмы: недавно травмированные, без тонуса и уставшие рискуют больше
+export function injuryRisk(p, fit) {
+  return (p.frag > 0 ? 2.5 : 1) * ((p.shp ?? 80) < 55 ? 1.5 : 1) * ((fit ?? p.fit) < 60 ? 1.6 : 1);
+}

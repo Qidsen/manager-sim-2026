@@ -1,4 +1,5 @@
 import React from 'react';
+import Crest from '../ui/Crest';
 import { View, StyleSheet } from 'react-native';
 import { C, T, Card, Btn, Bar, Empty, Row, Icon } from '../ui/kit';
 import Page from '../ui/page';
@@ -119,7 +120,8 @@ export function HistoryBody() {
               <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 5 }}>
                 <T muted size={12} style={{ width: 56 }}>{seasonLabel(x.y)}</T>
                 <Icon name="trophy" size={13} color={C.gold} />
-                <T size={14} bold={isUserTeam(W, x.w)} color={isUserTeam(W, x.w) ? C.gold : C.text} style={{ flex: 1 }} numberOfLines={1}>{x.w ? `${teamFlag(W, x.w)} ${teamName(W, x.w)}` : '—'}</T>
+                {x.w ? <Crest W={W} id={x.w} size={18} /> : null}
+                <T size={14} bold={isUserTeam(W, x.w)} color={isUserTeam(W, x.w) ? C.gold : C.text} style={{ flex: 1 }} numberOfLines={1}>{x.w ? teamName(W, x.w) : '—'}</T>
               </View>
             ))}
           </Card>

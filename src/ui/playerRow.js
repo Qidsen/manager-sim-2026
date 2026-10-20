@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text } from 'react-native';
 import { C, F, Row, T, Rating, Bar, Icon } from './kit';
-import { POS_RU, LINE, money, playerValue } from '../engine/util';
+import { POS_RU, LINE, money, playerValue, dynOvr } from '../engine/util';
+import { RANKS } from '../engine/career';
 import { NATION_BY_CODE } from '../data/nations';
 
 export const LINE_COLOR = { G: '#FFB547', D: '#4C8DFF', M: '#2BD67B', A: '#FF5A6A' };
@@ -25,7 +26,9 @@ function Tag({ icon, text, color }) {
   );
 }
 
-export default function PlayerRow({ p, onPress, right, sub, W, showClub, selected }) {
+export default function PlayerRow({ p, onPress, right, sub, W, showClub, selected, rank, warn }) {
+  const dyn = dynOvr(p);
+  const dd = dyn - p.ovr;
   const fitCol = p.fit < 60 ? C.red : p.fit < 75 ? C.orange : C.accent;
   return (
     <Row onPress={onPress} style={[{ paddingVertical: 10 }, selected ? { backgroundColor: C.goldDim, borderRadius: 12, paddingHorizontal: 6, marginHorizontal: -6 } : null]}>
@@ -37,6 +40,8 @@ export default function PlayerRow({ p, onPress, right, sub, W, showClub, selecte
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
           <T muted size={12}>{p.age} лет</T>
+          {rank && RANKS[rank] ? <Text style={{ color: RANKS[rank].color, fontSize: 11.5, fontWeight: '800' }}>· {RANKS[rank].ru}</Text> : null}
+          {warn ? <Tag icon="alert-circle" text="" color={C.orange} /> : null}
           {sub ? <T muted size={12} numberOfLines={1}>· {sub}</T> : null}
           {showClub && W ? <T muted size={12} numberOfLines={1} style={{ flexShrink: 1 }}>· {p.club ? W.clubs[p.club]?.name : p.fa ? 'свободный агент' : 'внутр. чемпионат'}</T> : null}
           {p.inj > 0 ? <Tag icon="medkit" text={`${Math.ceil(p.inj / 7)} нед`} color={C.red} /> : null}
@@ -47,7 +52,10 @@ export default function PlayerRow({ p, onPress, right, sub, W, showClub, selecte
         {!showClub ? <Bar value={p.fit} height={3} color={fitCol} style={{ marginTop: 6, width: 96 }} /> : null}
       </View>
       {right !== undefined ? right : null}
-      <Rating v={p.ovr} />
+      <View style={{ alignItems: 'center' }}>
+        <Rating v={dyn} />
+        {dd ? <Text style={{ color: dd > 0 ? C.accent : C.red, fontSize: 10, fontWeight: '800', marginTop: 1 }}>{dd > 0 ? `▲${dd}` : `▼${-dd}`}</Text> : null}
+      </View>
     </Row>
   );
 }

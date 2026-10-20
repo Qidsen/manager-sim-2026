@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import Crest from '../ui/Crest';
 import { View, Text, Pressable, FlatList, ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { C, F, T, Card, Btn, Seg, Bar, Icon, IconBtn, Rating, ratingColor, tap, thud } from '../ui/kit';
@@ -250,7 +251,7 @@ export default function MatchScreen() {
         <Text style={[st.kicker2, { textAlign: 'center' }]} numberOfLines={1}>{title.toUpperCase()}</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10 }}>
           <View style={{ flex: 1, alignItems: 'center' }}>
-            <Text style={{ fontSize: 30 }}>{teamFlag(W, m.h)}</Text>
+            <Crest W={W} id={m.h} size={40} />
             <Text style={[st.bugName, me === 0 && { color: C.gold }]} numberOfLines={2}>{s.h.name}</Text>
           </View>
           <View style={{ alignItems: 'center', minWidth: 124 }}>
@@ -266,7 +267,7 @@ export default function MatchScreen() {
             </View>
           </View>
           <View style={{ flex: 1, alignItems: 'center' }}>
-            <Text style={{ fontSize: 30 }}>{teamFlag(W, m.a)}</Text>
+            <Crest W={W} id={m.a} size={40} />
             <Text style={[st.bugName, me === 1 && { color: C.gold }]} numberOfLines={2}>{s.a.name}</Text>
           </View>
         </View>
@@ -461,7 +462,7 @@ function TeamHead({ W, id, me, avg, form }) {
   return (
     <View style={{ flex: 1, alignItems: 'center' }}>
       <View style={[st.ring, { borderColor: me ? C.gold : teamColor(W, id) }]}>
-        <Text style={{ fontSize: 36 }}>{teamFlag(W, id)}</Text>
+        <Crest W={W} id={id} size={46} />
       </View>
       <Text style={[st.headName, me && { color: C.gold }]} numberOfLines={2}>{teamName(W, id)}</Text>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>

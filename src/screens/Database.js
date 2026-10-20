@@ -4,6 +4,7 @@ import { C, T, Card, Btn, Stat } from '../ui/kit';
 import Page from '../ui/page';
 import { useG } from '../ui/ctx';
 import { REAL_SQUADS } from '../data/realSquads';
+import { resetLogos, discoverLogos } from '../logos';
 import { loadCustomSquads, clearCustomSquads, importSquadsFromFile, squadsStats } from '../squadsDb';
 
 export default function DatabaseScreen() {
@@ -20,9 +21,9 @@ export default function DatabaseScreen() {
     try {
       const r = await importSquadsFromFile();
       if (!r) return;
-      setCustom(r.squads);
+      if (r.squads) setCustom(r.squads);
       const st = squadsStats(r.squads);
-      G.alert('База загружена', `Клубов: ${st.clubs}, игроков: ${st.players}.${r.unknown.length ? `\n\nНе найдены в игре (пропущены): ${r.unknown.slice(0, 8).join(', ')}${r.unknown.length > 8 ? '…' : ''}` : ''}${r.bad ? `\nПропущено некорректных записей: ${r.bad}.` : ''}\n\nБаза применится в новой игре.`);
+      G.alert('Патч загружен', `${r.squads ? `Клубов: ${st.clubs}, игроков: ${st.players}.` : 'Составы в файле не найдены.'}${r.logoCount ? `\nЭмблем: ${r.logoCount} — уже работают.` : ''}${r.unknown.length ? `\n\nНе найдены в игре (пропущены): ${r.unknown.slice(0, 8).join(', ')}${r.unknown.length > 8 ? '…' : ''}` : ''}${r.bad ? `\nПропущено некорректных записей: ${r.bad}.` : ''}\n\nБаза применится в новой игре.`);
     } catch (e) {
       G.alert('Не удалось загрузить', String(e?.message || e));
     }
@@ -54,12 +55,17 @@ export default function DatabaseScreen() {
           </>
         )}
       </Card>
+      <Card title="Эмблемы клубов" icon="shield-outline">
+        <T size={13} style={{ marginBottom: 10 }}>Настоящие эмблемы встроены в игру и подгружаются из интернета. Недостающие игра ищет сама раз в неделю. Свои эмблемы можно добавить в файл-патч в разделе "_logos".</T>
+        <Btn title="Найти недостающие эмблемы сейчас" kind="ghost" icon="search" style={{ marginBottom: 8 }} onPress={async () => { G.setBusy('Ищем эмблемы…'); const n = await discoverLogos(G.W, true); G.setBusy(null); G.alert('Эмблемы', n ? `Найдено новых эмблем: ${n}.` : 'Новых эмблем не найдено (нужен интернет).'); }} />
+        <Btn title="Сбросить эмблемы из патча" kind="ghost" onPress={async () => { await resetLogos(); G.alert('Готово', 'Остались только встроенные эмблемы.'); }} />
+      </Card>
       <Card title="Формат файла" icon="code-slash-outline">
         <T size={13} style={{ lineHeight: 19 }}>
-          {'{\n  "Arsenal": [\n    ["David Raya", "GK", 31, 87, null, "ESP"],\n    ["Bukayo Saka", "RW", 25, 90, 91, "ENG"]\n  ]\n}'}
+          {'{\n  "Arsenal": [\n    ["David Raya", "GK", 31, 87, null, "ESP"],\n    ["Bukayo Saka", "RW", 25, 90, 91, "ENG"]\n  ],\n  "_logos": {\n    "Arsenal": "https://…/arsenal.png",\n    "Шахтар": 493\n  }\n}'}
         </T>
         <T muted size={12} style={{ marginTop: 8, lineHeight: 17 }}>
-          Игрок: имя, позиция (GK CB LB RB DM CM AM LW RW ST), возраст, рейтинг 1–99, потенциал (или null), код страны (ENG, UKR, BRA…). Название клуба — как в игре. В клубе нужно минимум 11 игроков.
+          Игрок: имя, позиция (GK CB LB RB DM CM AM LW RW ST), возраст, рейтинг 1–99, потенциал (или null), код страны (ENG, UKR, BRA…). Название клуба — как в игре. В клубе нужно минимум 11 игроков. В "_logos" — ссылка на картинку PNG или номер команды в ESPN.
         </T>
       </Card>
       <T muted size={12} center>База применяется при создании новой игры.</T>

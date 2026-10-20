@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import Crest from '../ui/Crest';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { C, F, T, Card, Empty, SubTabs, Icon, Badge, tap } from '../ui/kit';
 import Page from '../ui/page';
@@ -55,7 +56,7 @@ function Schedule() {
               <View style={{ flex: 1, minWidth: 0 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Text style={[st.ha, { backgroundColor: home ? C.accentDim : C.blueDim, color: home ? C.accent : C.blue }]}>{home ? 'Д' : 'Г'}</Text>
-                  <Text style={{ fontSize: 14 }}>{teamFlag(W, opp)}</Text>
+                  <Crest W={W} id={opp} size={18} />
                   <T bold size={14} numberOfLines={1} style={{ flexShrink: 1 }}>{teamName(W, opp)}</T>
                 </View>
                 <T muted size={11} numberOfLines={1} style={{ marginTop: 3 }}>{isNat(team) ? 'Сборная · ' : ''}{label}</T>

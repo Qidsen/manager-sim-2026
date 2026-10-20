@@ -4,7 +4,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { C, F, T, Card, Btn, Bar, Rating, Field, Seg, Stat, Badge, ratingColor } from '../ui/kit';
 import Page from '../ui/page';
 import { useG } from '../ui/ctx';
-import { POS_FULL, POS_RU, ATTRS, ATTR_RU, money, playerValue, clamp, DEV_ROLES, NEAR, ovrAs, retrainWeeks } from '../engine/util';
+import { POS_FULL, POS_RU, ATTRS, ATTR_RU, money, playerValue, clamp, DEV_ROLES, NEAR, ovrAs, retrainWeeks, dynParts, dynOvr, growthOf, GROWTH } from '../engine/util';
+import { potRange, reportView, squadRanks, RANKS, rankMismatch, watchPlayer, signProspect } from '../engine/career';
 import { NATION_BY_CODE } from '../data/nations';
 import { ROLES } from '../engine/market';
 import { makeBid, requestLoan, quickSell, releasePlayer, renewContract, renewDemand, talkToPlayer, wageDemand, askingPrice, promoteYouth, releaseYouth } from '../engine/sim';
@@ -20,10 +21,16 @@ export default function PlayerScreen({ id }) {
   const my = u.club ? W.clubs[u.club] : null;
   const mine = my && p.club === my.id;
   const club = p.club ? W.clubs[p.club] : null;
-  const scout = my ? my.staff.scout : 2;
-  const err = mine ? 2 : Math.max(1, 7 - scout);
-  const potLo = clamp(p.pot - err, p.ovr, 99);
-  const potHi = clamp(p.pot + err, p.ovr, 99);
+  const pr = potRange(W, p);
+  const potLo = pr.lo;
+  const potHi = pr.hi;
+  const dp = dynParts(p);
+  const dyn = dynOvr(p);
+  const rank = p.club ? squadRanks(W, p.club)[p.id] : null;
+  const mism = mine ? rankMismatch(W, p) : 0;
+  const rep = !mine && pr.known && (pr.report || p.age >= 28) ? reportView(W, p) : null;
+  const gpKnown = mine ? growthOf(p) : pr.report?.gp ? GROWTH[pr.report.gp] : null;
+  const watching = W.scouting?.watch?.includes(p.id);
   const avg = playerAvgRating(p);
   const nation = NATION_BY_CODE[p.nat];
   const natTeam = u.nation === p.nat ? W.nations[u.nation] : null;
@@ -38,18 +45,20 @@ export default function PlayerScreen({ id }) {
     <Page title={p.n} sub={`${POS_FULL[p.pos]} · ${p.age} лет`} back>
       <LinearGradient colors={[(club?.color || '#4C8DFF') + '40', C.card]} style={ps.hero}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-          <View style={[ps.ovrBox, { borderColor: ratingColor(p.ovr) }]}>
-            <Text style={[ps.ovr, { color: ratingColor(p.ovr) }]}>{p.ovr}</Text>
-            <Text style={ps.ovrLbl}>{POS_RU[p.pos]}</Text>
+          <View style={[ps.ovrBox, { borderColor: ratingColor(dyn) }]}>
+            <Text style={[ps.ovr, { color: ratingColor(dyn) }]}>{dyn}</Text>
+            <Text style={ps.ovrLbl}>{POS_RU[p.pos]}{p.alt?.length ? ` · ${p.alt.map((x) => POS_RU[x]).join(' ')}` : ''}</Text>
           </View>
           <View style={{ flex: 1 }}>
             <Text style={ps.nat}>{nation?.flag || ''} {(nation?.name || p.nat).toUpperCase()}</Text>
-            <T display size={22} numberOfLines={1}>{club ? club.name : p.fa ? 'Свободный агент' : p.aca ? 'Академия' : 'Внутренний чемпионат'}</T>
+            <T display size={22} numberOfLines={1}>{club ? club.name : p.fa ? 'Свободный агент' : p.aca ? 'Академия' : p.pros ? 'Юниор без клуба' : 'Внутренний чемпионат'}</T>
             {p.loan ? <T muted size={12}>аренда из «{W.clubs[p.loan.from]?.name || '—'}»</T> : null}
+            {rank ? <Text style={{ color: RANKS[rank].color, fontFamily: F.d7, fontSize: 13, marginTop: 2 }}>{RANKS[rank].ru.toUpperCase()}{mism > 0 && p.role ? `  ·  обещано: ${ROLES[p.role]?.short?.toLowerCase() || ''}` : ''}</Text> : null}
           </View>
         </View>
         <View style={ps.facts}>
-          <Fact label="Потенциал" value={potLo === potHi ? `${potLo}` : `${potLo}–${potHi}`} color={ratingColor(p.pot)} />
+          <Fact label="Потенциал" value={!pr.known ? '?' : potLo === potHi ? `${potLo}` : `${potLo}–${potHi}`} color={pr.known ? ratingColor((potLo + potHi) / 2) : C.muted} />
+          <Fact label="База" value={`${p.ovr}`} />
           <Fact label="Стоимость" value={money(playerValue(p))} />
           {club || p.fa ? <Fact label="Зарплата/нед" value={money(p.wage)} /> : null}
           {club ? <Fact label="Контракт" value={`до ${p.contract + 1}`} /> : null}
@@ -61,10 +70,14 @@ export default function PlayerScreen({ id }) {
             {p.ban > 0 ? <Badge icon="square" text={`ДИСКВАЛИФИКАЦИЯ · ${p.ban}`} color={C.red} /> : null}
           </View>
         ) : null}
-        <View style={{ flexDirection: 'row', gap: 14, marginTop: 14 }}>
+        <View style={{ flexDirection: 'row', gap: 12, marginTop: 14 }}>
           <View style={{ flex: 1 }}>
-            <T muted size={11}>Готовность {Math.round(p.fit)}%</T>
+            <T muted size={11}>Свежесть {Math.round(p.fit)}%</T>
             <Bar value={p.fit} color={p.fit < 70 ? C.orange : C.accent} height={6} style={{ marginTop: 4 }} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <T muted size={11}>Тонус {Math.round(p.shp ?? 80)}%</T>
+            <Bar value={p.shp ?? 80} color={(p.shp ?? 80) < 60 ? C.orange : C.gold} height={6} style={{ marginTop: 4 }} />
           </View>
           <View style={{ flex: 1 }}>
             <T muted size={11}>Мораль {Math.round(p.mor)}%</T>
@@ -72,6 +85,62 @@ export default function PlayerScreen({ id }) {
           </View>
         </View>
       </LinearGradient>
+
+      <Card title="Текущий рейтинг" icon="pulse-outline">
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginBottom: 10 }}>
+          <Text style={{ color: ratingColor(dyn), fontFamily: F.d8, fontSize: 30 }}>{dyn}</Text>
+          <T muted size={13} style={{ marginBottom: 5 }}>= база {p.ovr} {dyn - p.ovr >= 0 ? '+' : '−'} {Math.abs(dyn - p.ovr)}</T>
+        </View>
+        {[['Форма', dp.form, 'Средняя оценка последних матчей'], ['Мораль', dp.mor, 'Настроение игрока'], ['Тонус', dp.shp, 'Игровая практика']].map(([l, v, d]) => (
+          <View key={l} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 7 }}>
+            <T size={13} style={{ width: 64 }}>{l}</T>
+            <View style={{ flex: 1, height: 8, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 4, flexDirection: 'row' }}>
+              <View style={{ flex: 1, alignItems: 'flex-end' }}>{v < 0 ? <View style={{ width: `${Math.min(100, (-v / 4) * 100)}%`, height: 8, backgroundColor: C.red, borderRadius: 4 }} /> : null}</View>
+              <View style={{ width: 2, backgroundColor: C.line }} />
+              <View style={{ flex: 1 }}>{v > 0 ? <View style={{ width: `${Math.min(100, (v / 4) * 100)}%`, height: 8, backgroundColor: C.accent, borderRadius: 4 }} /> : null}</View>
+            </View>
+            <Text style={{ width: 34, textAlign: 'right', color: v > 0.05 ? C.accent : v < -0.05 ? C.red : C.muted, fontFamily: F.d7, fontSize: 14 }}>{v > 0 ? '+' : ''}{v.toFixed(1)}</Text>
+          </View>
+        ))}
+        {p.rr?.length ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+            <T muted size={12}>Последние оценки:</T>
+            {p.rr.map((r, i) => (
+              <View key={i} style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: (r >= 7.3 ? C.accent : r >= 6.5 ? C.blue : r >= 6 ? C.orange : C.red) + '30' }}>
+                <Text style={{ color: r >= 7.3 ? C.accent : r >= 6.5 ? C.blue : r >= 6 ? C.orange : C.red, fontFamily: F.d7, fontSize: 13 }}>{r.toFixed(1)}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+        {p.frag > 0 ? <T size={12} color={C.orange} style={{ marginTop: 8 }}>Недавно восстановился после травмы — высокий риск повторной.</T> : null}
+        {p.potTr && p.potTr.at > W.year * 365 + W.day - 60 && (mine || pr.report) ? <T size={12} color={p.potTr.d > 0 ? C.accent : C.red} style={{ marginTop: 6 }}>Потенциал недавно {p.potTr.d > 0 ? 'вырос' : 'снизился'} ({p.potTr.d > 0 ? '+' : ''}{p.potTr.d})</T> : null}
+      </Card>
+
+      {gpKnown ? (
+        <Card title="Профиль роста" icon="git-commit-outline">
+          <T bold size={15} color={C.gold}>{gpKnown.ru}</T>
+          <T muted size={13} style={{ marginTop: 4 }}>{gpKnown.d}</T>
+        </Card>
+      ) : null}
+
+      {!mine && my && !p.aca ? (
+        rep ? (
+          <Card title={pr.report ? `Отчёт скаута · ${pr.report.by}` : 'Оценка'} icon="eye-outline">
+            {[['Тактика', rep.tactic, rep.tacticGood ? C.accent : C.muted], ['Будущее', rep.future, C.gold], ['Финансы', rep.finance, C.text], ['Статус', rep.status, C.text]].filter((x) => x[1]).map(([l, v, col]) => (
+              <View key={l} style={{ marginBottom: 8 }}>
+                <T muted size={11}>{l.toUpperCase()}</T>
+                <T size={14} color={col}>{v}</T>
+              </View>
+            ))}
+            {p.pros ? <Btn title={`Подписать в академию · ${money(p.pros.fee)}`} icon="school" onPress={() => show(signProspect(W, p.id))} /> : null}
+          </Card>
+        ) : (
+          <Card title="Потенциал неизвестен" icon="eye-off-outline">
+            <T muted size={13} style={{ marginBottom: 10 }}>Отправьте скаута — он оценит потенциал, профиль роста и то, как игрок впишется в вашу команду.</T>
+            <Btn title={watching ? 'Скаут уже в пути' : 'Отправить скаута'} icon="eye" kind={watching ? 'ghost' : 'primary'} onPress={() => (watching ? null : show(watchPlayer(W, p.id)))} />
+          </Card>
+        )
+      ) : null}
 
       <Card title="Навыки" icon="analytics-outline">
         {ATTRS.filter((k) => (p.pos === 'GK' ? true : k !== 'gk')).map((k) => (
@@ -136,7 +205,7 @@ export default function PlayerScreen({ id }) {
           {!p.loan ? <Btn title={`Продать сразу (~${money(playerValue(p) * 0.7)})`} kind="ghost" onPress={() => G.dialog({ title: 'Быстрая продажа', text: 'Игрок уйдёт первому покупателю за ~70% стоимости. Продолжить?', buttons: [{ title: 'Продать', onPress: () => { const r = quickSell(W, p.id); show(r); if (r.status === 'accepted') G.pop(); } }, { title: 'Отмена', kind: 'ghost' }] })} /> : null}
           <Btn title={p.loan ? 'Вернуть из аренды' : 'Расторгнуть контракт'} kind="danger" onPress={() => G.dialog({ title: p.loan ? 'Вернуть игрока?' : 'Расторгнуть контракт?', text: p.loan ? 'Игрок вернётся в свой клуб.' : 'Клуб выплатит половину оставшейся зарплаты.', buttons: [{ title: 'Да', kind: 'danger', onPress: () => { const r = releasePlayer(W, p.id); show(r); if (r.status === 'accepted') G.pop(); } }, { title: 'Отмена', kind: 'ghost' }] })} />
         </View>
-      ) : my && !p.aca ? (
+      ) : my && !p.aca && !p.pros ? (
         <View style={{ gap: 8 }}>
           <Btn title={p.fa ? 'Переговоры о контракте' : 'Начать переговоры'} icon="chatbubbles" onPress={() => G.push('negotiate', { pid: p.id, kind: 'buy' })} />
           {club && !p.loan ? <Btn title="Попросить в аренду" icon="repeat" kind="ghost" onPress={() => G.push('negotiate', { pid: p.id, kind: 'loan' })} /> : null}

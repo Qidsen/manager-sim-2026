@@ -1,4 +1,5 @@
 import React from 'react';
+import Crest from '../ui/Crest';
 import { View } from 'react-native';
 import { C, T, Card, Stat } from '../ui/kit';
 import Page from '../ui/page';
@@ -22,7 +23,8 @@ export default function TeamScreen({ id }) {
   const next = nextMatches(W, id, 3);
   const last = lastResults(W, id, 3);
   return (
-    <Page title={`${teamFlag(W, id)} ${teamName(W, id)}`} sub={nat ? NATION_BY_CODE[natCode(id)]?.conf : c.league ? LEAGUE_BY_ID[c.league].name : NATION_BY_CODE[c.country]?.name} back>
+    <Page title={teamName(W, id)} sub={nat ? NATION_BY_CODE[natCode(id)]?.conf : c.league ? LEAGUE_BY_ID[c.league].name : NATION_BY_CODE[c.country]?.name} back>
+      <View style={{ alignItems: 'center', marginBottom: 12 }}><Crest W={W} id={id} size={84} /></View>
       <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
         {[
           ['Репутация', Math.round(nat ? W.nations[natCode(id)].rep : c.rep)],

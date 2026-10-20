@@ -1,6 +1,6 @@
 // Движок матча: поминутная симуляция с текстовой трансляцией.
 import { rand, chance, weighted, pick, randInt, poisson } from './rng';
-import { FORMATIONS, LINE, slotRating, clamp } from './util';
+import { FORMATIONS, LINE, slotRating, clamp, dynDelta, injuryRisk } from './util';
 
 // ---------- выбор состава ----------
 export function available(p) {
@@ -24,12 +24,12 @@ export function autoLineup(W, pool, form, opts = {}) {
     let bv = -1;
     for (const p of cand) {
       if (used.has(p.id)) continue;
-      const v = slotRating(p, pos) * (opts.ignoreFit ? 1 : condFactor(p.fit));
+      const v = (slotRating(p, pos) + dynDelta(p)) * (opts.ignoreFit ? 1 : condFactor(p.fit));
       if (v > bv) { bv = v; best = p; }
     }
     if (best) { xi[i] = best.id; used.add(best.id); }
   }
-  const rest = cand.filter((p) => !used.has(p.id)).sort((a, b) => b.ovr * condFactor(b.fit) - a.ovr * condFactor(a.fit));
+  const rest = cand.filter((p) => !used.has(p.id)).sort((a, b) => (b.ovr + dynDelta(b)) * condFactor(b.fit) - (a.ovr + dynDelta(a)) * condFactor(a.fit));
   const bench = [];
   const gk = rest.find((p) => p.pos === 'GK');
   if (gk) bench.push(gk.id);
@@ -54,7 +54,7 @@ export function resolveLineup(W, pool, tactic) {
     let bv = -1;
     for (const p of cand) {
       if (used.has(p.id)) continue;
-      const v = slotRating(p, slots[i][0]) * condFactor(p.fit);
+      const v = (slotRating(p, slots[i][0]) + dynDelta(p)) * condFactor(p.fit);
       if (v > bv) { bv = v; best = p; }
     }
     if (best) { xi[i] = best.id; used.add(best.id); }
@@ -67,6 +67,13 @@ export function resolveLineup(W, pool, tactic) {
   }
   bench = bench.slice(0, 9);
   return { xi, bench };
+}
+
+// длительность травмы; повторная травма (вскоре после прошлой) тяжелее
+function injLength(p) {
+  const d = randInt(3, 10) + (chance(0.3) ? randInt(10, 50) : 0);
+  if (p.frag > 0) { p.reinj = true; return Math.round(d * 1.6); }
+  return d;
 }
 
 // ---------- сила команды ----------
@@ -82,7 +89,7 @@ function strengths(W, side) {
     if (!id) continue; // удалён — дыра
     const p = W.players[id];
     const f = side.fit[id] ?? p.fit;
-    sum[ln] += slotRating(p, pos) * condFactor(f) * (0.95 + (side.mor ?? 70) / 1400);
+    sum[ln] += (slotRating(p, pos) + dynDelta(p)) * condFactor(f);
   }
   const avg = (k) => (cnt[k] ? sum[k] / cnt[k] : 40);
   // недобор игроков (удаления) уже снизил суммы
@@ -130,7 +137,7 @@ export function createMatch(W, home, away, opts = {}) {
     for (const id of [...lu.xi, ...lu.bench]) if (id) fit[id] = W.players[id].fit;
     return {
       ref: t.ref, name: t.name, short: t.short, isUser: !!t.isUser, autoSubs: t.isUser ? !!t.autoSubs : true,
-      tac: { ...t.tac }, xi: lu.xi, bench: lu.bench, fit, subsLeft: 5, subWindows: 3, played: new Set(lu.xi.filter(Boolean)),
+      tac: { ...t.tac }, xi: lu.xi, bench: lu.bench, fit, subsLeft: 5, subWindows: 3, played: new Set(lu.xi.filter(Boolean)), xi0: new Set(lu.xi.filter(Boolean)),
       mor: t.mor ?? 70, yc: {}, off: new Set(),
     };
   };
@@ -517,12 +524,12 @@ export function stepMinute(W, S) {
     }
     if (rand() < 0.0011) {
       const ids = onPitch(sd);
-      const v = ids.length ? pick(ids) : null;
+      const v = ids.length ? weighted(ids, (id) => injuryRisk(W.players[id], sd.fit[id])) : null;
       if (v) {
         const p = W.players[v];
         sd.injured = sd.injured || new Set();
         sd.injured.add(v);
-        p.injNew = randInt(3, 10) + (chance(0.3) ? randInt(10, 50) : 0);
+        p.injNew = injLength(p);
         log(S, si, fill(pick(T.injury), { p: p.n }), { type: 'inj', pid: v });
         if (sd.autoSubs || !sd.isUser) aiSubs(W, S, si, true);
       }
@@ -644,6 +651,12 @@ export function applyResults(W, S, { competitive = true, national = false } = {}
         p.car.app++;
       }
       p.mor = Math.round(clamp(p.mor + (won ? 3 : lost ? -3 : 0) + (r >= 7.5 ? 2 : r < 5.8 ? -2 : 0), 10, 100));
+      // форма: скользящее среднее последних оценок; тонус растёт от игровых минут
+      p.frm = Math.round(clamp((p.frm || 0) * 0.65 + clamp((r - 6.7) * 1.6, -3, 3) * 0.35, -3, 3) * 100) / 100;
+      p.shp = Math.round(clamp((p.shp ?? 80) + (sd.xi0?.has(id) ? 9 : 5), 30, 100));
+      p.lp = (W.year || 0) * 365 + (W.day || 0);
+      if (competitive) (p.rr ||= []).push(Math.round(r * 10) / 10);
+      if (p.rr && p.rr.length > 5) p.rr.shift();
       if (p.injNew) {
         p.inj = p.injNew;
         delete p.injNew;
@@ -750,8 +763,8 @@ export function quickMatch(W, S) {
     }
     if (chance(0.1)) {
       const ids = onPitch(sd);
-      const v = ids.length ? pick(ids) : null;
-      if (v) W.players[v].injNew = randInt(3, 10) + (chance(0.3) ? randInt(10, 50) : 0);
+      const v = ids.length ? weighted(ids, (id) => injuryRisk(W.players[id], sd.fit[id])) : null;
+      if (v) W.players[v].injNew = injLength(W.players[v]);
     }
     const drain = 30 * (1 + (sd.tac.press - 1) * 0.18 + (sd.tac.tempo - 1) * 0.09);
     for (const id of onPitch(sd)) {

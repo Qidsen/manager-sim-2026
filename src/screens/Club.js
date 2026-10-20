@@ -91,9 +91,8 @@ export default function ClubScreen({ tab: initial }) {
 
       {tab === 'train' ? (
         <>
-          <Card title="Интенсивность тренировок" icon="barbell-outline">
-            <Seg options={[{ value: 0, label: 'Лёгкая' }, { value: 1, label: 'Обычная' }, { value: 2, label: 'Высокая' }]} value={c.training.int} onChange={(v) => { c.training.int = v; G.refresh(); }} />
-            <T muted size={12} style={{ marginTop: 8 }}>Высокая интенсивность ускоряет развитие игроков, но они дольше восстанавливаются и чаще травмируются.</T>
+          <Card title="Тренировки" icon="barbell-outline" onPress={() => { G.setTab('squad'); }}>
+            <T muted size={13}>План недели, двусторонние игры и тонус игроков — во вкладке «Команда → Тренировки».</T>
           </Card>
           <Card title="Персонал и инфраструктура" icon="business-outline">
             {[['coach', 'Тренерский штаб', 'Развитие игроков'], ['med', 'Медицинский центр', 'Восстановление и травмы'], ['scout', 'Скаутский отдел', 'Точность оценки потенциала'], ['youth', 'Академия', 'Качество воспитанников']].map(([k, l, d]) => {

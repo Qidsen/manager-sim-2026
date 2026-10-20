@@ -2,11 +2,12 @@
 import { LEAGUES, LEAGUE_BY_ID } from '../data/leagues';
 import { NATIONS, NATION_BY_CODE } from '../data/nations';
 import { rand, randInt, chance, pick, shuffle, weighted, gauss, getState, seed } from './rng';
-import { recalcOvr, playerValue, wageFor, clamp, POS_WEIGHTS, ATTRS, LINE, money, fmtDate, seasonLabel, POS_FULL, devRole, retrainWeeks } from './util';
+import { recalcOvr, playerValue, wageFor, clamp, POS_WEIGHTS, ATTRS, LINE, money, fmtDate, seasonLabel, POS_FULL, devRole, retrainWeeks, growthOf } from './util';
 import { createMatch, simulateFull, applyResults, winnerSide, quickMatch } from './match';
 import { buildSeason, buildFinals, recordResult, recordFriendly, koContext, sortRows, addFriendly, healComp } from './comps';
 import { INTL_DAYS, SUMMER_DAYS, isWindow, WINDOWS } from './fixtures';
 import { processDebts } from './market';
+import { weeklyCareer, monthlyPotential, planRecovery, planGrowth, planInjury, rankMismatch } from './career';
 import { teamName, teamPool, teamTactic, isNat, natCode, isUserTeam, callUp, invalidateNatIndex, teamRep } from './teams';
 import { levelOfRep, youthPlayer, newStats, newFin, fillNations, makePlayer, randomName } from './gen';
 
@@ -31,7 +32,7 @@ export function newGame(W, { club, nation, name }) {
   W.user = {
     name: name || 'Тренер', club: club || null, nation: nation || null,
     rep: club ? clamp(W.clubs[club].rep - 8, 30, 90) : clamp((W.nations[nation]?.rep || 60) - 5, 30, 90),
-    conf: 65, natConf: 65, trophies: [], career: [], autoSubs: true, autoCall: false, target: null, natTarget: null,
+    conf: 65, natConf: 65, trophies: [], career: [], autoSubs: true, plan: 'bal', autoCall: false, target: null, natTarget: null,
   };
   buildSeason(W, null);
   startOfSeason(W, true);
@@ -380,10 +381,12 @@ function dailyTick(W) {
       if (p.inj <= 0) {
         p.inj = 0;
         p.fit = Math.min(p.fit, 70);
+        p.frag = 28; // первые недели после травмы — риск повторной
+        p.reinj = false;
         if (userClub && p.club === userClub.id) mail(W, `${p.n} восстановился`, `${p.n} вернулся к тренировкам после травмы.`);
       }
     } else if (p.fit < 100) {
-      p.fit = Math.min(100, Math.round(p.fit + 6.5 - int * 1.2));
+      p.fit = Math.min(100, Math.round(p.fit + 6.5 - int * 1.2 + planRecovery(W, p)));
     }
   }
   if (day % 7 === 4) weekly(W);
@@ -435,6 +438,20 @@ function roleCheck(W) {
 
 function weekly(W) {
   processDebts(W);
+  try {
+    weeklyCareer(W);
+    if (W._scoutDone?.length) {
+      mail(W, 'Скауты завершили задания', `${W._scoutDone.join(', ')} вернулись из командировки. Новые отчёты — в разделе «Скаутинг».`);
+      W._scoutDone = [];
+    }
+    if (W.scouting?.newCount >= 1 && W.user?.club) {
+      const n = W.scouting.newCount;
+      W.scouting.newCount = 0;
+      W.scouting.unseen = (W.scouting.unseen || 0) + n;
+    }
+  } catch (e) {
+    logErr(W, 'weeklyCareer', e);
+  }
   for (const p of playerList(W)) if (p.fa) p.faDays = (p.faDays || 0) + 7;
   if (Math.floor(W.day / 7) % 4 === 2) roleCheck(W);
   // тренировки и развитие — раз в 4 недели (с учётом всех четырёх недель)
@@ -443,14 +460,17 @@ function weekly(W) {
     const club = p.club ? W.clubs[p.club] : null;
     const tf = club ? [0.82, 1, 1.15][club.training.int] * (0.9 + club.staff.coach * 0.04) : 0.9;
     let d;
-    if (p.age <= 20) d = (p.pot - p.ovr) * 0.0078;
-    else if (p.age <= 23) d = (p.pot - p.ovr) * 0.0052;
-    else if (p.age <= 27) d = (p.pot - p.ovr) * 0.0025;
-    else if (p.age <= 29) d = 0;
-    else d = -(p.age - 29) * 0.022;
+    const gp = growthOf(p);
+    if (p.age <= 20) d = (p.pot - p.ovr) * 0.0078 * gp.g[0];
+    else if (p.age <= 23) d = (p.pot - p.ovr) * 0.0052 * gp.g[1];
+    else if (p.age <= 27) d = (p.pot - p.ovr) * 0.0025 * gp.g[2];
+    else if (p.age <= gp.peak) d = (p.pot - p.ovr) * 0.0015 * gp.g[2];
+    else d = -(p.age - gp.peak) * 0.022 * gp.dec;
     const dev = p.dev;
-    const indiv = dev ? [0.85, 1, 1.2][dev.int ?? 1] : 1;
-    d = (d * (d > 0 ? tf * indiv : 1 / tf) + gauss(0, 0.05)) * 4;
+    const indiv = (dev ? [0.85, 1, 1.2][dev.int ?? 1] : 1) * planGrowth(W, p);
+    // хорошая форма ускоряет рост
+    if (d > 0 && (p.frm || 0) > 1) d *= 1.15;
+    d = (d * (d > 0 ? tf * indiv : 1 / tf) + gauss(0, 0.05 * gp.v)) * 4;
     if (p.inj > 20 && d > 0) d *= 0.5;
     // переучивание на новую позицию
     if (dev?.newPos) {
@@ -492,10 +512,14 @@ function weekly(W) {
     // мораль понемногу возвращается к норме
     p.mor = Math.round(p.mor + (70 - p.mor) * 0.28);
     // травмы на тренировках
-    if (club && p.inj <= 0 && chance(0.006 * [0.6, 1, 1.6][club.training.int] * (6 - club.staff.med) / 3)) {
+    if (club && p.inj <= 0 && chance(0.006 * [0.6, 1, 1.6][club.training.int] * planInjury(W, p) * (p.frag > 0 ? 2 : 1) * (6 - club.staff.med) / 3)) {
       p.inj = randInt(3, 21);
       if (W.user?.club === club.id) mail(W, `Травма: ${p.n}`, `${p.n} травмировался на тренировке и пропустит около ${Math.ceil(p.inj / 7)} нед.`);
     }
+  }
+  if (monthly) {
+    const ch = monthlyPotential(W);
+    if (ch.length) mail(W, 'Изменился потенциал игроков', `По оценке тренерского штаба:\n${ch.join('\n')}\n\nПотенциал растёт от ярких матчей и падает при долгом провале или без игровой практики.`);
   }
   // финансы
   for (const cid in W.clubs) {
@@ -601,7 +625,7 @@ function aiTransfers(W, attempts) {
     let bv = -1;
     for (let i = 0; i < 350; i++) {
       const p = W.players[ids[Math.floor(rand() * ids.length)]];
-      if (!p || p.pos !== need || p.club === buyer.id || p.aca || p.loan) continue;
+      if (!p || p.pos !== need || p.club === buyer.id || p.aca || p.loan || p.pros) continue;
       if (W.user?.club && p.club === W.user.club) continue;
       if (p.ovr < L - 1 || p.ovr > L + 7 || p.age > 32 || p.inj > 30) continue;
       const seller = p.club ? W.clubs[p.club] : null;
@@ -1036,6 +1060,8 @@ function rollover(W) {
     const p = W.players[id];
     p.age++;
     p.st = newStats();
+    p.frm = 0;
+    p.rr = [];
     p.ban = 0;
     if (p.loan) {
       const back = p.loan.from ? W.clubs[p.loan.from] : null;

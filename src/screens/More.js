@@ -43,6 +43,7 @@ export default function OfficeScreen() {
       <Group title="Сообщения">
         <Tile icon="mail" color={C.orange} title="Почта" sub={unread ? `${unread} непрочитанных` : 'Всё прочитано'} badge={unread} onPress={() => G.push('inbox')} />
         <Tile icon="newspaper" color={C.blue} title="Новости" sub="Трансферы, победители, события" onPress={() => G.push('news')} />
+        {club ? <Tile icon="eye" color={C.gold} title="Скаутинг" sub={`${W.scouting?.scouts?.length || 0} скаут(ов) · отчётов ${Object.keys(W.scouting?.reports || {}).length}`} badge={W.scouting?.unseen || 0} onPress={() => G.push('scouting')} /> : null}
         {club ? <Tile wide icon="pricetags" color={C.orange} title="Предложения за игроков" sub={offers ? `${offers} от других клубов — ответьте в «Трансферах»` : 'Новых предложений нет'} badge={offers} onPress={() => G.setTab('transfers')} /> : null}
       </Group>
       {club ? (
@@ -63,7 +64,7 @@ export default function OfficeScreen() {
         <Tile icon="save" color={C.muted} title="Сохранить" sub="Сохраняется и само" onPress={async () => { await saveGame(W); G.alert('Сохранено', 'Прогресс записан.'); }} />
         <Tile icon="exit" color={C.red} title="Главное меню" sub="С сохранением" onPress={() => G.toMenu()} />
       </Group>
-      <Text style={s.ver}>MANAGER SIM 2026 · ВЕРСИЯ 1.6</Text>
+      <Text style={s.ver}>MANAGER SIM 2026 · ВЕРСИЯ 1.7</Text>
     </Page>
   );
 }

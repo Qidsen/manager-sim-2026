@@ -1,4 +1,5 @@
 import React from 'react';
+import Crest from '../ui/Crest';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { C, F, Btn, T, Card, Bar, FormDots, Icon, IconBtn, More, tap, thud } from '../ui/kit';
@@ -165,7 +166,8 @@ export default function HomeScreen() {
                     <View key={i} style={s.upRow}>
                       <Text style={s.upDate}>{fmtShort(W.year, m.day)}</Text>
                       <Text style={[s.ha, { color: home ? C.accent : C.blue }]}>{home ? 'Д' : 'Г'}</Text>
-                      <T size={14} style={{ flex: 1 }} numberOfLines={1}>{teamFlag(W, opp)} {teamName(W, opp)}</T>
+                      <Crest W={W} id={opp} size={18} />
+                      <T size={14} style={{ flex: 1 }} numberOfLines={1}>{teamName(W, opp)}</T>
                       <T muted size={11} numberOfLines={1} style={{ maxWidth: 110 }}>{comp.kind === 'friendly' ? 'товарищеский' : comp.name}</T>
                     </View>
                   );
@@ -257,7 +259,7 @@ function TeamBlock({ W, id, me }) {
   return (
     <View style={{ flex: 1, alignItems: 'center' }}>
       <View style={[s.flagRing, { borderColor: me ? C.gold : teamColor(W, id) }]}>
-        <Text style={{ fontSize: 30 }}>{teamFlag(W, id)}</Text>
+        <Crest W={W} id={id} size={40} />
       </View>
       <Text style={[s.teamName, me && { color: C.gold }]} numberOfLines={2}>{teamName(W, id)}</Text>
     </View>

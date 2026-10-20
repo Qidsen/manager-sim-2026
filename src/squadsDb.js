@@ -2,7 +2,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
-import { LEAGUES } from './data/leagues';
+import { LEAGUES, BG_CLUBS } from './data/leagues';
+import { applyPatchLogos } from './logos';
 
 const KEY = 'custom_squads_v1';
 const POS = new Set(['GK', 'CB', 'LB', 'RB', 'DM', 'CM', 'AM', 'LW', 'RW', 'ST']);
@@ -30,11 +31,13 @@ export function squadsStats(sq) {
 // Проверка и нормализация: { "Клуб": [[имя, поз, возраст, рейтинг, потенциал, страна], ...] }
 export function validateSquads(data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Файл должен содержать объект вида { "Клуб": [ игроки ] }.');
-  const known = new Set(LEAGUES.flatMap((l) => l.clubs.map((c) => c[0])));
+  const known = new Set([...LEAGUES.flatMap((l) => l.clubs.map((c) => c[0])), ...BG_CLUBS.map((c) => c[0])]);
   const out = {};
   const unknown = [];
   let bad = 0;
+  const logos = data._logos && typeof data._logos === 'object' ? data._logos : null;
   for (const club of Object.keys(data)) {
+    if (club.startsWith('_')) continue;
     if (!known.has(club)) { unknown.push(club); continue; }
     const list = [];
     for (const p of data[club] || []) {
@@ -46,8 +49,8 @@ export function validateSquads(data) {
     if (list.length >= 11) out[club] = list;
     else bad += list.length;
   }
-  if (!Object.keys(out).length) throw new Error('В файле не нашлось ни одного клуба с названием из игры и хотя бы 11 корректными игроками.');
-  return { squads: out, unknown, bad };
+  if (!Object.keys(out).length && !logos) throw new Error('В файле не нашлось ни одного клуба с названием из игры и хотя бы 11 корректными игроками.');
+  return { squads: Object.keys(out).length ? out : null, unknown, bad, logos };
 }
 
 async function readUri(asset) {
@@ -75,6 +78,7 @@ export async function importSquadsFromFile() {
     throw new Error('Не удалось прочитать JSON. Проверьте кавычки и запятые в файле.');
   }
   const v = validateSquads(data);
-  await AsyncStorage.setItem(KEY, JSON.stringify(v.squads));
+  if (v.squads) await AsyncStorage.setItem(KEY, JSON.stringify(v.squads));
+  v.logoCount = v.logos ? await applyPatchLogos(v.logos) : 0;
   return v;
 }
