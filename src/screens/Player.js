@@ -5,7 +5,8 @@ import { C, F, T, Card, Btn, Bar, Rating, Field, Seg, Stat, Badge, ratingColor }
 import Page from '../ui/page';
 import { useG } from '../ui/ctx';
 import { POS_FULL, POS_RU, ATTRS, ATTR_RU, money, playerValue, clamp, DEV_ROLES, NEAR, ovrAs, retrainWeeks, dynParts, dynOvr, growthOf, GROWTH } from '../engine/util';
-import { potRange, reportView, squadRanks, RANKS, rankMismatch, watchPlayer, signProspect } from '../engine/career';
+import { potRange, reportView, squadRanks, RANKS, rankMismatch, watchPlayer, signProspect, isShort, toggleShort } from '../engine/career';
+import { IconBtn } from '../ui/kit';
 import { NATION_BY_CODE } from '../data/nations';
 import { ROLES } from '../engine/market';
 import { makeBid, requestLoan, quickSell, releasePlayer, renewContract, renewDemand, talkToPlayer, wageDemand, askingPrice, promoteYouth, releaseYouth } from '../engine/sim';
@@ -42,7 +43,7 @@ export default function PlayerScreen({ id }) {
   };
 
   return (
-    <Page title={p.n} sub={`${POS_FULL[p.pos]} · ${p.age} лет`} back>
+    <Page title={p.n} sub={`${POS_FULL[p.pos]} · ${p.age} лет`} back right={my && !mine && !p.aca ? <IconBtn name={isShort(W, p.id) ? 'star' : 'star-outline'} color={isShort(W, p.id) ? C.gold : C.text} onPress={() => { const on = toggleShort(W, p.id); G.refresh(); G.save(); G.alert(on ? 'Добавлен в шорт-лист' : 'Убран из шорт-листа', on ? 'Следите за игроком в «Трансферы → Шорт-лист». Об изменениях (выставлен на трансфер, сменил клуб, вырос рейтинг) придёт письмо.' : 'Игрок больше не отслеживается.'); }} /> : null}>
       <LinearGradient colors={[(club?.color || '#4C8DFF') + '40', C.card]} style={ps.hero}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
           <View style={[ps.ovrBox, { borderColor: ratingColor(dyn) }]}>

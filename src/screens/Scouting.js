@@ -7,7 +7,7 @@ import { useG } from '../ui/ctx';
 import PlayerRow from '../ui/playerRow';
 import { POS_RU, POSITIONS, money, fmtShort } from '../engine/util';
 import { NATION_BY_CODE } from '../data/nations';
-import { scoutingState, scoutCandidates, hireScout, fireScout, assignScout, COUNTRIES, MAX_SCOUTS, potRange } from '../engine/career';
+import { scoutingState, scoutCandidates, hireScout, fireScout, assignScout, COUNTRIES, MAX_SCOUTS, potRange, dismissReport, dismissAllReports, isShort, toggleShort } from '../engine/career';
 
 const stars = (n) => '★'.repeat(n) + '☆'.repeat(5 - n);
 
@@ -94,9 +94,11 @@ export default function ScoutingScreen() {
 
       {tab === 'reports' ? (
         reports.length ? (
-          <Card title={`Отчёты · ${reports.length}`} icon="document-text-outline">
+          <Card title={`Отчёты · ${reports.length}`} icon="document-text-outline" right={<Pressable onPress={() => G.dialog({ title: 'Очистить отчёты?', text: 'Все отчёты, кроме игроков из шорт-листа, будут удалены. Скауты не будут предлагать этих игроков год.', buttons: [{ title: 'Очистить', kind: 'danger', onPress: () => { dismissAllReports(W); G.refresh(); } }, { title: 'Отмена', kind: 'ghost' }] })}><T color={C.red} size={12} bold>Очистить</T></Pressable>}>
+            <T muted size={11} style={{ marginBottom: 4 }}>☆ — в шорт-лист, ✕ — убрать отчёт (скаут больше не будет предлагать игрока).</T>
             {reports.map(({ p, r }) => {
               const pr = potRange(W, p);
+              const star = isShort(W, p.id);
               return (
                 <PlayerRow
                   key={p.id}
@@ -105,9 +107,13 @@ export default function ScoutingScreen() {
                   showClub
                   onPress={() => G.push('player', { id: p.id })}
                   right={
-                    <View style={{ alignItems: 'flex-end', marginRight: 4 }}>
-                      <T muted size={10}>ПОТЕНЦИАЛ</T>
-                      <Text style={{ color: C.gold, fontFamily: F.d7, fontSize: 15 }}>{pr.lo === pr.hi ? pr.lo : `${pr.lo}–${pr.hi}`}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginRight: 2 }}>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <T muted size={10}>ПОТ.</T>
+                        <Text style={{ color: C.gold, fontFamily: F.d7, fontSize: 15 }}>{pr.lo === pr.hi ? pr.lo : `${pr.lo}–${pr.hi}`}</Text>
+                      </View>
+                      <Pressable hitSlop={6} onPress={() => { toggleShort(W, p.id); G.refresh(); }}><Icon name={star ? 'star' : 'star-outline'} size={20} color={star ? C.gold : C.muted} /></Pressable>
+                      <Pressable hitSlop={6} onPress={() => { dismissReport(W, p.id); G.refresh(); }}><Icon name="close-circle-outline" size={20} color={C.muted} /></Pressable>
                     </View>
                   }
                 />
@@ -121,7 +127,7 @@ export default function ScoutingScreen() {
 
       {tab === 'youth' ? (
         youth.length ? (
-          <Card title="Найденные таланты" icon="school-outline">
+          <Card title="Найденные таланты" icon="school-outline" right={<Pressable onPress={() => { dismissAllReports(W, true); G.refresh(); }}><T color={C.red} size={12} bold>Очистить</T></Pressable>}>
             <T muted size={12} style={{ marginBottom: 4 }}>Юниоры без контракта. Подпишите их в академию, пока предложение действует.</T>
             {youth.map((p) => {
               const pr = potRange(W, p);
@@ -132,9 +138,12 @@ export default function ScoutingScreen() {
                   onPress={() => G.push('player', { id: p.id })}
                   sub={`до ${fmtShort(Math.floor(p.pros.until / 365), p.pros.until % 365)} · ${money(p.pros.fee)}`}
                   right={
-                    <View style={{ alignItems: 'flex-end', marginRight: 4 }}>
-                      <T muted size={10}>ПОТЕНЦИАЛ</T>
-                      <Text style={{ color: C.gold, fontFamily: F.d7, fontSize: 15 }}>{pr.lo}–{pr.hi}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginRight: 2 }}>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <T muted size={10}>ПОТ.</T>
+                        <Text style={{ color: C.gold, fontFamily: F.d7, fontSize: 15 }}>{pr.lo}–{pr.hi}</Text>
+                      </View>
+                      <Pressable hitSlop={6} onPress={() => { dismissReport(W, p.id); G.refresh(); }}><Icon name="close-circle-outline" size={20} color={C.muted} /></Pressable>
                     </View>
                   }
                 />

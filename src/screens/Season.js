@@ -8,6 +8,8 @@ import { teamMatches, resultLetter, scoreText, userTeamIds, topScorers } from '.
 import { teamName, teamFlag, isNat } from '../engine/teams';
 import { dayToDate, fmtShort, seasonLabel } from '../engine/util';
 import { CompView, CompsList } from './Comps';
+import { sortRows } from '../engine/comps';
+import { cupProgress } from '../engine/board';
 import { HistoryBody } from './Career';
 
 const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
@@ -78,6 +80,117 @@ function Schedule() {
   );
 }
 
+const inStage = (st, t) => st.rounds.some((r) => r.some((m) => m.h === t || m.a === t));
+const ORDER = { league: 0, cup: 1, qual: 2 };
+
+// Все турниры моей команды и сборной на одном экране
+function MyComps() {
+  const G = useG();
+  const W = G.W;
+  const teams = userTeamIds(W);
+  const items = [];
+  for (const c of Object.values(W.comps)) {
+    if (c.kind === 'friendly') continue;
+    for (const t of teams) if (c.stages.some((st) => inStage(st, t)) || c.teams?.includes(t)) { items.push({ c, t }); break; }
+  }
+  items.sort((a, b) => (isNat(a.t) - isNat(b.t)) || (ORDER[a.c.kind] ?? 3) - (ORDER[b.c.kind] ?? 3) || (a.c.id.startsWith('CUP') ? -1 : 1));
+  if (!items.length) return <Empty text="Турниров пока нет." icon="trophy-outline" />;
+  return items.map(({ c, t }) => <CompBlock key={c.id} W={W} G={G} c={c} t={t} />);
+}
+
+function CompBlock({ W, G, c, t }) {
+  let si = -1;
+  c.stages.forEach((st, i) => { if (inStage(st, t)) si = i; });
+  const st = si >= 0 ? c.stages[si] : c.stages[0];
+  let status = null;
+  let col = C.muted;
+  if (c.kind === 'cup') {
+    const pr = cupProgress(W, c, t);
+    if (pr.won) { status = 'ПОБЕДА В ТУРНИРЕ'; col = C.gold; }
+    else if (pr.out) { status = `ВЫБЫЛИ · ${(st?.name || '').toUpperCase()}`; col = C.red; }
+    else if (pr.reached >= 0) { status = (st?.name || '').toUpperCase(); col = C.accent; }
+  } else if (c.done) { status = c.winner === t ? 'ЧЕМПИОН' : 'ЗАВЕРШЁН'; col = c.winner === t ? C.gold : C.muted; }
+  // ближайший матч в этом турнире
+  let next = null;
+  for (const s2 of c.stages) for (const r of s2.rounds) for (const m of r) if (m.hg === null && (m.h === t || m.a === t) && (!next || m.day < next.day)) next = m;
+  return (
+    <Card title={`${isNat(t) ? 'Сборная · ' : ''}${c.name}`} icon={c.kind === 'league' ? 'list' : isNat(t) ? 'flag' : 'trophy'} onPress={() => G.push('comp', { id: c.id })} right={status ? <Text style={{ color: col, fontSize: 10.5, fontWeight: '800' }} numberOfLines={1}>{status}</Text> : null}>
+      {st?.t === 'rr' ? <MiniTable W={W} st={st} t={t} /> : st?.t === 'ko' ? <MiniTie W={W} st={st} t={t} /> : null}
+      {next ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+          <Icon name="calendar-outline" size={13} color={C.muted} />
+          <T muted size={12}>Дальше: {fmtShort(W.year, next.day)} · {next.h === t ? 'дома' : 'в гостях'} с</T>
+          <Crest W={W} id={next.h === t ? next.a : next.h} size={15} />
+          <T size={12} bold numberOfLines={1} style={{ flexShrink: 1 }}>{teamName(W, next.h === t ? next.a : next.h)}</T>
+        </View>
+      ) : null}
+    </Card>
+  );
+}
+
+function MiniTable({ W, st, t }) {
+  const g = st.groups.find((x) => x.teams.includes(t)) || st.groups[0];
+  const gi = st.groups.indexOf(g);
+  const rows = sortRows(g.rows, W);
+  const me = rows.findIndex((r) => r.id === t);
+  let show = rows.map((r, i) => i);
+  if (rows.length > 12) show = show.filter((i) => i < 4 || Math.abs(i - me) <= 2 || i >= rows.length - 2);
+  const out = [];
+  show.forEach((i, k) => {
+    if (k > 0 && i - show[k - 1] > 1) out.push(<T key={`gap${i}`} muted size={11} center>···</T>);
+    const r = rows[i];
+    const mine = r.id === t;
+    out.push(
+      <View key={r.id} style={[st2.row, mine && { backgroundColor: C.goldDim }]}>
+        <T size={12} muted style={{ width: 20 }}>{i + 1}</T>
+        <Crest W={W} id={r.id} size={16} />
+        <T size={13} bold={mine} color={mine ? C.gold : C.text} numberOfLines={1} style={{ flex: 1 }}>{teamName(W, r.id)}</T>
+        <T size={12} muted style={{ width: 24, textAlign: 'center' }}>{r.p}</T>
+        <T size={12} muted style={{ width: 34, textAlign: 'center' }}>{r.gf - r.ga > 0 ? '+' : ''}{r.gf - r.ga}</T>
+        <Text style={{ width: 26, textAlign: 'center', color: mine ? C.gold : C.text, fontFamily: F.d8, fontSize: 14 }}>{r.pts}</Text>
+      </View>
+    );
+  });
+  return (
+    <View>
+      {st.groups.length > 1 ? <T muted size={11} style={{ marginBottom: 4 }}>{st.groupNames?.[gi] || `${st.name} · группа ${String.fromCharCode(65 + gi)}`}</T> : null}
+      <View style={[st2.row, { paddingVertical: 2 }]}>
+        <T muted size={10} style={{ width: 20 }}>#</T>
+        <T muted size={10} style={{ flex: 1, marginLeft: 22 }}>КОМАНДА</T>
+        <T muted size={10} style={{ width: 24, textAlign: 'center' }}>И</T>
+        <T muted size={10} style={{ width: 34, textAlign: 'center' }}>РМ</T>
+        <T muted size={10} style={{ width: 26, textAlign: 'center' }}>О</T>
+      </View>
+      {out}
+    </View>
+  );
+}
+
+function MiniTie({ W, st, t }) {
+  const tie = st.ties.find((x) => x.a === t || x.b === t);
+  if (!tie) return null;
+  return (
+    <View>
+      <T muted size={11} style={{ marginBottom: 4 }}>{st.name}</T>
+      {tie.m.map((m, i) => (
+        <View key={i} style={st2.row}>
+          <T muted size={11} style={{ width: 44 }}>{fmtShort(W.year, m.day)}</T>
+          <T size={13} bold={m.h === t} numberOfLines={1} style={{ flex: 1, textAlign: 'right' }}>{teamName(W, m.h)}</T>
+          <Crest W={W} id={m.h} size={15} />
+          <T bold size={13} style={{ minWidth: 46, textAlign: 'center' }}>{scoreText(m)}</T>
+          <Crest W={W} id={m.a} size={15} />
+          <T size={13} bold={m.a === t} numberOfLines={1} style={{ flex: 1 }}>{teamName(W, m.a)}</T>
+        </View>
+      ))}
+      {tie.w ? <T size={12} color={tie.w === t ? C.accent : C.red} style={{ marginTop: 4 }}>{tie.w === t ? 'Проходите дальше' : `Дальше проходит ${teamName(W, tie.w)}`}</T> : null}
+    </View>
+  );
+}
+
+const st2 = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 5, paddingHorizontal: 4, borderRadius: 6 },
+});
+
 export default function SeasonScreen() {
   const G = useG();
   const W = G.W;
@@ -87,6 +200,7 @@ export default function SeasonScreen() {
   const [tab, setTab] = useState('fixtures');
   const tabs = [
     { value: 'fixtures', label: 'Расписание', icon: 'calendar' },
+    { value: 'mine', label: 'Мои турниры', icon: 'layers' },
     ...(leagueId ? [{ value: 'table', label: 'Таблица', icon: 'list' }, { value: 'scorers', label: 'Бомбардиры', icon: 'football' }] : []),
     { value: 'comps', label: 'Все турниры', icon: 'trophy' },
     { value: 'history', label: 'История', icon: 'time' },
@@ -94,6 +208,7 @@ export default function SeasonScreen() {
   return (
     <Page title="Сезон" sub={`${seasonLabel(W.year)}${club ? ` · ${W.comps[leagueId]?.name || ''}` : ''}`} tabs={<SubTabs options={tabs} value={tab} onChange={setTab} />}>
       {tab === 'fixtures' ? <Schedule /> : null}
+      {tab === 'mine' ? <MyComps /> : null}
       {tab === 'table' && leagueId ? <CompView key="t" id={leagueId} initial="table" bare /> : null}
       {tab === 'scorers' && leagueId ? <CompView key="s" id={leagueId} initial="scorers" bare /> : null}
       {tab === 'comps' ? <CompsList /> : null}

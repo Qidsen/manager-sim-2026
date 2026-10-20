@@ -8,6 +8,8 @@ import { POSITIONS, POS_RU, money, playerValue, fmtShort } from '../engine/util'
 import { answerOffer } from '../engine/sim';
 import { counterOffer, sellerName, ROLES } from '../engine/market';
 import { isWindow, WINDOWS } from '../engine/fixtures';
+import { shortList, toggleShort, potRange } from '../engine/career';
+import Crest from '../ui/Crest';
 
 const OVR = [{ value: 0, label: 'Любой' }, { value: 65, label: '65+' }, { value: 70, label: '70+' }, { value: 75, label: '75+' }, { value: 80, label: '80+' }, { value: 85, label: '85+' }];
 const PRICE = [{ value: Infinity, label: 'Любая цена' }, { value: 2e6, label: 'до €2 млн' }, { value: 1e7, label: 'до €10 млн' }, { value: 3e7, label: 'до €30 млн' }, { value: 8e7, label: 'до €80 млн' }];
@@ -70,6 +72,7 @@ export default function TransfersScreen() {
 
       <Chips
         options={[
+          { value: 'short', label: `★ Шорт-лист${(u.short || []).length ? ` · ${u.short.length}` : ''}` },
           { value: 'search', label: 'Поиск' },
           { value: 'fa', label: 'Свободные агенты' },
           { value: 'talks', label: `Переговоры${talks.length ? ` · ${talks.length}` : ''}` },
@@ -80,6 +83,8 @@ export default function TransfersScreen() {
         onChange={(v) => { setSeg(v); setRes(null); }}
         style={{ marginBottom: 12 }}
       />
+
+      {seg === 'short' ? <ShortList /> : null}
 
       {seg === 'search' || seg === 'fa' ? (
         <>
@@ -223,3 +228,64 @@ const st = StyleSheet.create({
   offerBox: { alignItems: 'center', backgroundColor: C.bg2, borderRadius: 14, paddingVertical: 10, marginVertical: 10, borderWidth: 1, borderColor: C.line },
   offerSum: { color: C.gold, fontFamily: F.d8, fontSize: 30 },
 });
+
+function ShortList() {
+  const G = useG();
+  const W = G.W;
+  const list = shortList(W).filter((x) => W.players[x.pid]);
+  const [sort, setSort] = useState('added');
+  if (!list.length) return <Empty text="Шорт-лист пуст. Нажмите ☆ в карточке игрока, чтобы следить за ним." icon="star-outline" />;
+  const rows = list.map((x) => ({ x, p: W.players[x.pid] }));
+  if (sort === 'ovr') rows.sort((a, b) => b.p.ovr - a.p.ovr);
+  if (sort === 'val') rows.sort((a, b) => playerValue(a.p) - playerValue(b.p));
+  if (sort === 'pos') rows.sort((a, b) => POSITIONS.indexOf(a.p.pos) - POSITIONS.indexOf(b.p.pos));
+  return (
+    <>
+      <Seg options={[{ value: 'added', label: 'Недавние' }, { value: 'pos', label: 'Позиция' }, { value: 'ovr', label: 'Рейтинг' }, { value: 'val', label: 'Цена' }]} value={sort} onChange={setSort} style={{ marginBottom: 10 }} />
+      {rows.map(({ x, p }) => {
+        const pr = potRange(W, p);
+        const d = p.ovr - x.ovr0;
+        const neg = W.negs?.[p.id];
+        const tags = [];
+        if (p.fa) tags.push(['свободный агент', C.accent]);
+        if (p.listed) tags.push(['продаётся', C.gold]);
+        if (p.club && p.contract <= W.year) tags.push(['контракт истекает', C.orange]);
+        if (p.inj > 0) tags.push([`травма ${Math.ceil(p.inj / 7)} нед`, C.red]);
+        if (neg?.status === 'open') tags.push(['идут переговоры', C.blue]);
+        if (p.loan) tags.push(['в аренде', C.muted]);
+        return (
+          <Card key={p.id} onPress={() => G.push('player', { id: p.id })} style={{ padding: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <PosBadge pos={p.pos} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <T bold size={15} numberOfLines={1}>{p.n}</T>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                  {p.club ? <Crest W={W} id={p.club} size={14} /> : null}
+                  <T muted size={12} numberOfLines={1} style={{ flexShrink: 1 }}>{p.club ? W.clubs[p.club]?.name : p.fa ? 'без клуба' : 'внутр. чемпионат'} · {p.age} лет</T>
+                </View>
+              </View>
+              <View style={{ alignItems: 'center' }}>
+                <Rating v={p.ovr} />
+                {d ? <Text style={{ color: d > 0 ? C.accent : C.red, fontSize: 10, fontWeight: '800' }}>{d > 0 ? `▲${d}` : `▼${-d}`}</Text> : null}
+              </View>
+              <Pressable hitSlop={8} onPress={() => { toggleShort(W, p.id); G.refresh(); }} style={{ paddingLeft: 4 }}>
+                <Icon name="star" size={22} color={C.gold} />
+              </Pressable>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 14, marginTop: 8 }}>
+              <View><T muted size={10}>СТОИМОСТЬ</T><Text style={st.price}>{money(playerValue(p))}</Text></View>
+              <View><T muted size={10}>ПОТЕНЦИАЛ</T><Text style={st.price}>{pr.known ? (pr.lo === pr.hi ? pr.lo : `${pr.lo}–${pr.hi}`) : '?'}</Text></View>
+              <View><T muted size={10}>ЗАРПЛАТА</T><Text style={st.price}>{money(p.wage)}</Text></View>
+              {p.club ? <View><T muted size={10}>КОНТРАКТ</T><Text style={st.price}>до {p.contract + 1}</Text></View> : null}
+            </View>
+            {tags.length ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                {tags.map(([t, c]) => <Badge key={t} text={t.toUpperCase()} color={c} />)}
+              </View>
+            ) : null}
+          </Card>
+        );
+      })}
+    </>
+  );
+}

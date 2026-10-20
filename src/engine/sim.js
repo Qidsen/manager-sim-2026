@@ -9,7 +9,7 @@ import { INTL_DAYS, SUMMER_DAYS, isWindow, WINDOWS } from './fixtures';
 import { processDebts, processNegs, processClauses } from './market';
 import { maybePress, onUserResult, checkPromise, weeklyEvents } from './stories';
 import { makeObjectives, boardMonthly, boardSeasonEnd, IMP } from './board';
-import { weeklyCareer, monthlyPotential, planRecovery, planGrowth, planInjury, rankMismatch } from './career';
+import { checkShortList, weeklyCareer, monthlyPotential, planRecovery, planGrowth, planInjury, rankMismatch } from './career';
 import { teamName, teamPool, teamTactic, isNat, natCode, isUserTeam, callUp, invalidateNatIndex, teamRep } from './teams';
 import { levelOfRep, youthPlayer, newStats, newFin, fillNations, makePlayer, randomName } from './gen';
 
@@ -455,6 +455,7 @@ function roleCheck(W) {
 function weekly(W) {
   processDebts(W);
   try { processClauses(W); } catch (e) { logErr(W, 'clauses', e); }
+  try { checkShortList(W, mail); } catch (e) { logErr(W, 'short', e); }
   try {
     const ev = weeklyEvents(W);
     if (ev) mail(W, ev.title, `${ev.text}\n\nПримите решение в разделе «Офис → События».`, { stop: true, kind: 'event', ref: ev.id });

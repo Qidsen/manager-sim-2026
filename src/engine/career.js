@@ -280,6 +280,7 @@ function scoutingWeek(W) {
         const country = p.club ? W.clubs[p.club]?.country : null;
         if (t.nat && p.nat !== t.nat && country !== t.nat) continue;
         if (sc.reports[p.id] && now - sc.reports[p.id].at < 120) continue;
+        if (sc.hidden?.[p.id] > now) continue;
         cands.push(p);
       }
       // опытный скаут находит игроков нужного уровня и с потенциалом
@@ -410,4 +411,64 @@ export function reportView(W, p) {
     out.status = bits.join(', ');
   } else out.status = p.fa ? 'Без клуба' : p.pros ? `Юниор без контракта — можно подписать в академию до ${fmtShort(Math.floor(p.pros.until / 365), p.pros.until % 365)}` : 'Играет во внутреннем чемпионате';
   return out;
+}
+
+// ================= шорт-лист (как в FC: игроки, за которыми вы следите) =================
+export function shortList(W) {
+  if (!W.user) return [];
+  if (!W.user.short) W.user.short = [];
+  return W.user.short;
+}
+export function isShort(W, pid) {
+  return !!W.user?.short?.some((s) => s.pid === pid);
+}
+export function toggleShort(W, pid) {
+  const list = shortList(W);
+  const i = list.findIndex((s) => s.pid === pid);
+  if (i >= 0) { list.splice(i, 1); return false; }
+  const p = W.players[pid];
+  if (!p) return false;
+  list.unshift({ pid, at: absDay(W), ovr0: p.ovr, val0: playerValue(p), club0: p.club, listed: !!p.listed });
+  return true;
+}
+// раз в неделю: что изменилось у игроков из шорт-листа
+export function checkShortList(W, mail) {
+  const list = W.user?.short;
+  if (!list?.length) return;
+  const notes = [];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const s = list[i];
+    const p = W.players[s.pid];
+    if (!p) { notes.push('Один из игроков шорт-листа завершил карьеру.'); list.splice(i, 1); continue; }
+    if (p.club === W.user.club) { list.splice(i, 1); continue; }
+    if (p.club !== s.club0) {
+      notes.push(p.club ? `${p.n} перешёл в «${W.clubs[p.club]?.name}».` : p.fa ? `${p.n} стал свободным агентом — его можно подписать без трансферной суммы!` : `${p.n} сменил клуб.`);
+      s.club0 = p.club;
+    }
+    if (p.listed && !s.listed) notes.push(`${p.n} выставлен на трансфер — клуб готов его продать.`);
+    s.listed = !!p.listed;
+    if (p.ovr >= s.ovr0 + 3 && !s.grew) { s.grew = true; notes.push(`${p.n} прибавил: ${s.ovr0} → ${p.ovr}.`); }
+    if (p.inj > 30 && !s.hurt) { s.hurt = true; notes.push(`${p.n} получил серьёзную травму (~${Math.ceil(p.inj / 7)} нед.).`); }
+    if (p.inj <= 0) s.hurt = false;
+  }
+  if (notes.length) mail(W, 'Шорт-лист: новости', notes.join('\n'), { kind: 'short' });
+}
+
+// Скрыть отчёт скаута / юниора — больше не предлагать этого игрока
+export function dismissReport(W, pid) {
+  const sc = scoutingState(W);
+  delete sc.reports[pid];
+  (sc.hidden ||= {})[pid] = absDay(W) + 365;
+  const p = W.players[pid];
+  if (p?.pros) {
+    delete W.players[pid];
+    sc.youth = sc.youth.filter((x) => x !== pid);
+    invalidateNatIndex(W);
+  }
+}
+export function dismissAllReports(W, youth = false) {
+  const sc = scoutingState(W);
+  const ids = youth ? sc.youth.slice() : Object.keys(sc.reports).filter((pid) => !W.players[pid]?.pros && !isShort(W, +pid));
+  for (const pid of ids) dismissReport(W, +pid);
+  return ids.length;
 }

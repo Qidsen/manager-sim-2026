@@ -68,7 +68,7 @@ export default function OfficeScreen() {
         <Tile icon="save" color={C.muted} title="Сохранить" sub="Сохраняется и само" onPress={async () => { await saveGame(W); G.alert('Сохранено', 'Прогресс записан.'); }} />
         <Tile icon="exit" color={C.red} title="Главное меню" sub="С сохранением" onPress={() => G.toMenu()} />
       </Group>
-      <Text style={s.ver}>MANAGER SIM 2026 · ВЕРСИЯ 2.0</Text>
+      <Text style={s.ver}>MANAGER SIM 2026 · ВЕРСИЯ 2.1</Text>
     </Page>
   );
 }

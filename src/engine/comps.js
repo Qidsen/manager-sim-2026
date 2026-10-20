@@ -506,6 +506,22 @@ export function buildInternational(W) {
 
 // Финальные турниры сборных — создаются после последнего окна сезона
 export function buildFinals(W) {
+  // Финал четырёх Лиги наций: победители групп лиги A
+  const unl = W.comps.UNL;
+  if (unl && !W.comps.UNLF) {
+    const st0 = unl.stages[0];
+    const win = st0.groups.slice(0, 4).map((g) => sortRows(g.rows, W)[0]?.id).filter(Boolean);
+    if (win.length === 4) {
+      const F = W.year + 1;
+      const plan = [
+        { name: '1/2 финала', legs: 1, dates: [SUMMER_DAYS[2]], neutral: true },
+        { name: 'Финал', legs: 1, dates: [SUMMER_DAYS[5]], neutral: true },
+      ];
+      const kst = koStage(plan[0].name, [[win[0], win[3]], [win[1], win[2]]], 1, plan[0].dates, true);
+      W.comps.UNLF = { id: 'UNLF', name: `Лига наций: Финал четырёх ${F}`, kind: 'cup', scope: 'nat', stages: [kst], plan, cur: 0, teams: win, prizes: null, hist: 'UNLF', neutralAll: true };
+      addSchedule(W, 'UNLF', 0, kst);
+    }
+  }
   for (const plan of W.intlPlan || []) {
     if (W.comps[plan.id]) continue;
     let teams;
