@@ -1,0 +1,21 @@
+{
+  "name": "manager-sim-2026",
+  "version": "1.0.0",
+  "main": "index.js",
+  "private": true,
+  "scripts": {
+    "start": "expo start",
+    "tunnel": "expo start --tunnel",
+    "ios": "expo start --ios",
+    "android": "expo start --android"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "expo": "~58.0.16",
+    "expo-status-bar": "~58.0.3",
+    "expo-updates": "~58.0.17",
+    "react": "19.3.0",
+    "react-native": "0.88.0",
+    "react-native-safe-area-context": "~5.10.1"
+  }
+}

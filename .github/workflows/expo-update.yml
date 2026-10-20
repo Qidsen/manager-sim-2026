@@ -1,0 +1,36 @@
+name: Публикация в Expo
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - run: npm ci
+
+      - name: Привязать проект к аккаунту Expo
+        run: |
+          if ! grep -q '"projectId"' app.json; then
+            eas init --non-interactive --force
+          fi
+
+      - name: Настроить EAS Update
+        run: eas update:configure --platform all --non-interactive || true
+
+      - name: Опубликовать обновление
+        run: eas update --branch main --message "${{ github.event.head_commit.message || 'Ручная публикация' }}" --non-interactive
