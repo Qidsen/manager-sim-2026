@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   update:
     runs-on: ubuntu-latest
@@ -32,5 +35,18 @@ jobs:
       - name: Настроить EAS Update
         run: eas update:configure --platform all --non-interactive || true
 
-      - name: Опубликовать обновление
-        run: eas update --branch main --message "${{ github.event.head_commit.message || 'Ручная публикация' }}" --non-interactive
+      - name: Опубликовать обновление в канал preview
+        run: eas update --channel preview --message "${{ github.event.head_commit.message || 'Ручная публикация' }}" --non-interactive
+
+      - name: Сохранить ссылку для Expo Go
+        run: |
+          PID=$(node -p "require('./app.json').expo.extra.eas.projectId")
+          SDK=$(node -p "require('expo/package.json').version.split('.')[0]")
+          LINK="exp://u.expo.dev/${PID}?channel-name=preview&runtime-version=exposdk:${SDK}.0.0"
+          printf '# Ссылка для Expo Go\n\nОткройте на iPhone (Safari или камерой через QR):\n\n%s\n' "$LINK" > EXPO_LINK.md
+          echo "$LINK" >> "$GITHUB_STEP_SUMMARY"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.json EXPO_LINK.md
+          git diff --cached --quiet || git commit -m "Ссылка для Expo Go [skip ci]"
+          git push
