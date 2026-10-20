@@ -1,5 +1,5 @@
 // Движок матча: поминутная симуляция с текстовой трансляцией.
-import { rand, chance, weighted, pick, randInt } from './rng';
+import { rand, chance, weighted, pick, randInt, poisson } from './rng';
 import { FORMATIONS, LINE, slotRating, clamp } from './util';
 
 // ---------- выбор состава ----------
@@ -200,15 +200,20 @@ function aiSubs(W, S, sideIdx, force = false) {
     }
   }
   if (force) return;
-  const tired = side.xi
+  // плановые замены: уставшие и игроки с низкой оценкой; к 82-й минуте используем почти все замены
+  const late = S.min >= 80;
+  const limit = S.min < 65 ? 1 : 2;
+  const cands = side.xi
     .map((id, i) => ({ id, i }))
-    .filter((x) => x.id && slots[x.i][0] !== 'GK' && (side.fit[x.id] ?? 100) < 72)
-    .sort((a, b) => side.fit[a.id] - side.fit[b.id]);
+    .filter((x) => x.id && slots[x.i][0] !== 'GK' && !side.injured?.has(x.id))
+    .map((x) => ({ ...x, fit: side.fit[x.id] ?? W.players[x.id].fit, r: S.rating[x.id] ?? 6.2 }))
+    .filter((x) => x.fit < 80 || x.r < 6.0 || late || (side.yc[x.id] && S.min >= 60))
+    .sort((a, b) => a.fit + a.r * 4 - (b.fit + b.r * 4));
   let n = 0;
-  for (const t of tired) {
-    if (n >= 2 || side.subsLeft <= 0) break;
+  for (const t of cands) {
+    if (n >= limit || side.subsLeft <= 1) break;
     const sub = bestSubFor(W, side, slots[t.i][0]);
-    if (sub && W.players[sub].ovr >= W.players[t.id].ovr - 8) {
+    if (sub && W.players[sub].ovr >= W.players[t.id].ovr - 10) {
       doSub(W, S, sideIdx, t.id, sub);
       n++;
     }
@@ -360,17 +365,17 @@ export function stepMinute(W, S) {
     }
     // усталость (пересчёт раз в 5 минут)
     if (S.min % 5 === 0) {
-      const drain = 5 * (0.19 + (sd.tac.press - 1) * 0.05 + (sd.tac.tempo - 1) * 0.02);
+      const drain = 5 * (0.33 + (sd.tac.press - 1) * 0.06 + (sd.tac.tempo - 1) * 0.03);
       for (const id of sd.xi) {
         if (!id) continue;
         const p = W.players[id];
-        sd.fit[id] = Math.max(15, (sd.fit[id] ?? p.fit) - drain * (1.25 - p.a.phy / 250) - (p.age > 31 ? 0.2 : 0));
+        sd.fit[id] = Math.max(15, (sd.fit[id] ?? p.fit) - drain * (1.25 - p.a.phy / 250) - (p.age > 31 ? 0.25 : 0));
       }
     }
   }
 
   // ИИ: замены и смена тактики
-  if (S.min === 58 || S.min === 66 || S.min === 74 || S.min === 82) {
+  if (S.min === 60 || S.min === 68 || S.min === 76 || S.min === 83) {
     for (let si = 0; si < 2; si++) {
       const sd = sideOf(S, si);
       if (!sd.isUser || sd.autoSubs) aiSubs(W, S, si);
@@ -468,10 +473,10 @@ export function applyResults(W, S, { competitive = true, national = false } = {}
         p.caps++;
       } else if (competitive) {
         p.st.app++;
-        p.st.rs += r;
+        p.st.rs = Math.round((p.st.rs + r) * 10) / 10;
         p.car.app++;
       }
-      p.mor = clamp(p.mor + (won ? 3 : lost ? -3 : 0) + (r >= 7.5 ? 2 : r < 5.8 ? -2 : 0), 10, 100);
+      p.mor = Math.round(clamp(p.mor + (won ? 3 : lost ? -3 : 0) + (r >= 7.5 ? 2 : r < 5.8 ? -2 : 0), 10, 100));
       if (p.injNew) {
         p.inj = p.injNew;
         delete p.injNew;
@@ -489,4 +494,128 @@ export function applyResults(W, S, { competitive = true, national = false } = {}
       if (as) W.players[as].st.as++;
     }
   }
+}
+
+// ---------- быстрый расчёт матча (для матчей без участия игрока) ----------
+// Та же модель сил, что и в поминутной симуляции, но результат считается сразу.
+
+function expectedGoals(W, att, def, attSide, defSide, minutes) {
+  const ph = 1 / (1 + Math.exp(-(att.M - def.M) / 30));
+  const tempo = 1 + (attSide.tac.tempo - 1) * 0.08 + (defSide.tac.tempo - 1) * 0.04;
+  const pChance = 0.19 * Math.exp((att.A - def.D) / 35) * tempo;
+  // средний бьющий: взвешиваем по тем же весам, что и pickShooter
+  const slots = FORMATIONS[attSide.tac.form];
+  let ws = 0;
+  let sho = 0;
+  for (let i = 0; i < 11; i++) {
+    const id = attSide.xi[i];
+    if (!id) continue;
+    const w = { GK: 0, CB: 0.55, LB: 0.55, RB: 0.55, DM: 0.7, CM: 1.4, AM: 2.3, LW: 2.3, RW: 2.3, ST: 3.3 }[slots[i][0]];
+    ws += w;
+    sho += w * W.players[id].a.sho;
+  }
+  sho = ws ? sho / ws : 50;
+  const gkId = gkOf(W, defSide);
+  const gk = gkId ? W.players[gkId] : null;
+  const gkv = gk ? (gk.pos === 'GK' ? gk.a.gk : 25) : 10;
+  const onT = clamp(0.36 + (sho - 65) / 160, 0.2, 0.6);
+  const pGoal = clamp(0.33 * Math.exp((sho * 0.55 + att.A * 0.45 - gkv) / 22), 0.08, 0.7);
+  return { lambda: minutes * ph * pChance * onT * pGoal, shots: minutes * ph * pChance, ph };
+}
+
+export function quickMatch(W, S) {
+  // S создан через createMatch без трансляции
+  const st = [strengths(W, S.h), strengths(W, S.a)];
+  if (!S.neutral) {
+    st[0].A += 1.8; st[0].M += 1.8; st[0].D += 1.2;
+  }
+  const sides = [S.h, S.a];
+  const e0 = expectedGoals(W, st[0], st[1], S.h, S.a, 90);
+  const e1 = expectedGoals(W, st[1], st[0], S.a, S.h, 90);
+  const goalsFor = (si, n, from, to) => {
+    const side = sides[si];
+    const opp = sides[1 - si];
+    for (let k = 0; k < n; k++) {
+      const min = randInt(from, to);
+      const shooter = pickShooter(W, side);
+      if (!shooter) continue;
+      const as = chance(0.72) ? pickAssister(W, side, shooter) : null;
+      S.score[si]++;
+      S.goals.push([min, si, shooter, as]);
+      addRating(S, shooter, 1.0);
+      if (as) addRating(S, as, 0.6);
+      const gkId = gkOf(W, opp);
+      if (gkId) addRating(S, gkId, -0.35);
+    }
+  };
+  goalsFor(0, poisson(e0.lambda), 1, 90);
+  goalsFor(1, poisson(e1.lambda), 1, 90);
+  S.shots = [Math.round(e0.shots), Math.round(e1.shots)];
+  S.poss = [Math.round(e0.ph * 100), 100 - Math.round(e0.ph * 100)];
+  // карточки, травмы, замены и усталость
+  for (let si = 0; si < 2; si++) {
+    const sd = sides[si];
+    const ny = poisson(1.6);
+    for (let k = 0; k < ny; k++) {
+      const f = pickFouler(W, sd);
+      if (!f) continue;
+      if (sd.yc[f]) {
+        W.players[f].ban = (W.players[f].ban || 0) + 1;
+        addRating(S, f, -1.2);
+      } else {
+        sd.yc[f] = 1;
+        addRating(S, f, -0.3);
+      }
+    }
+    if (chance(0.03)) {
+      const f = pickFouler(W, sd);
+      if (f) { W.players[f].ban = (W.players[f].ban || 0) + 2; addRating(S, f, -1.5); }
+    }
+    if (chance(0.1)) {
+      const ids = onPitch(sd);
+      const v = ids.length ? pick(ids) : null;
+      if (v) W.players[v].injNew = randInt(3, 10) + (chance(0.3) ? randInt(10, 50) : 0);
+    }
+    const drain = 30 * (1 + (sd.tac.press - 1) * 0.18 + (sd.tac.tempo - 1) * 0.09);
+    for (const id of onPitch(sd)) {
+      const p = W.players[id];
+      sd.fit[id] = Math.max(15, (sd.fit[id] ?? p.fit) - drain * (1.25 - p.a.phy / 250));
+    }
+    // три плановые замены
+    const slots = FORMATIONS[sd.tac.form];
+    const outs = sd.xi
+      .map((id, i) => ({ id, i }))
+      .filter((x) => x.id && slots[x.i][0] !== 'GK')
+      .sort((a, b) => (sd.fit[a.id] ?? 100) - (sd.fit[b.id] ?? 100))
+      .slice(0, 3);
+    for (const o of outs) {
+      const sub = bestSubFor(W, sd, slots[o.i][0]);
+      if (!sub || W.players[sub].ovr < W.players[o.id].ovr - 10) continue;
+      sd.xi[o.i] = sub;
+      sd.bench = sd.bench.filter((x) => x !== sub);
+      sd.played.add(sub);
+      sd.fit[sub] = Math.max(15, (sd.fit[sub] ?? W.players[sub].fit) - 8);
+      if (S.rating[sub] === undefined) S.rating[sub] = 6.2;
+    }
+  }
+  S.min = 90;
+  // плей-офф: дополнительное время и пенальти
+  if (S.ko && S.ko.needWinner) {
+    const agg = S.ko.prev ? [S.score[0] + S.ko.prev[0], S.score[1] + S.ko.prev[1]] : S.score;
+    if (agg[0] === agg[1]) {
+      goalsFor(0, poisson(e0.lambda / 3), 91, 120);
+      goalsFor(1, poisson(e1.lambda / 3), 91, 120);
+      S.min = 120;
+      const agg2 = S.ko.prev ? [S.score[0] + S.ko.prev[0], S.score[1] + S.ko.prev[1]] : S.score;
+      if (agg2[0] === agg2[1]) {
+        let a = 0;
+        let b = 0;
+        for (let r = 0; r < 5; r++) { if (chance(0.76)) a++; if (chance(0.76)) b++; }
+        while (a === b) { if (chance(0.76)) a++; if (chance(0.76)) b++; }
+        S.pens = [a, b];
+      }
+    }
+  }
+  S.done = true;
+  S.phase = 'done';
 }

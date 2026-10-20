@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator, ScrollView, Platform } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator, ScrollView, Platform, AppState } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Ctx } from './src/ui/ctx';
@@ -21,6 +21,7 @@ import NationScreen, { CallupScreen } from './src/screens/Nation';
 import InboxScreen from './src/screens/Inbox';
 import CareerScreen, { NewsScreen, HistoryScreen } from './src/screens/Career';
 import TacticsScreen from './src/screens/Tactics';
+import DatabaseScreen from './src/screens/Database';
 
 const TABS = [
   { key: 'home', label: 'Главная', icon: '🏠' },
@@ -43,6 +44,7 @@ const STACK = {
   news: NewsScreen,
   history: HistoryScreen,
   tactics: TacticsScreen,
+  database: DatabaseScreen,
 };
 
 export default function App() {
@@ -57,16 +59,32 @@ export default function App() {
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
+  // Сохранение: не чаще раза в несколько секунд и никогда два одновременно
+  const saving = useRef(false);
+  const pending = useRef(false);
   const save = useCallback(
-    (now = false) => {
+    async (now = false) => {
       if (!W) return;
       if (saveTimer.current) clearTimeout(saveTimer.current);
-      const run = () => saveGame(W);
+      const run = async () => {
+        if (saving.current) { pending.current = true; return; }
+        saving.current = true;
+        await saveGame(W);
+        saving.current = false;
+        if (pending.current) { pending.current = false; saveTimer.current = setTimeout(run, 3000); }
+      };
       if (now) return run();
-      saveTimer.current = setTimeout(run, 600);
+      saveTimer.current = setTimeout(run, 4000);
     },
     [W]
   );
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st !== 'active' && W) save(true);
+    });
+    return () => sub.remove();
+  }, [W, save]);
 
   const G = useMemo(
     () => ({
@@ -86,6 +104,7 @@ export default function App() {
       dialog: (d) => setDialog(d),
       alert: (title, text) => setDialog({ title, text }),
       // тяжёлые вычисления с индикатором
+      setBusy,
       run: (label, fn) =>
         new Promise((resolve) => {
           setBusy(label || 'Минутку…');
@@ -103,6 +122,10 @@ export default function App() {
           }, 50);
         }),
       startGame: (world) => {
+        if (!world.v || world.v < 2) {
+          if (world.user) world.user.autoSubs = true;
+          world.v = 2;
+        }
         seed(world.rng || 1);
         setW(world);
         setTab('home');
@@ -120,10 +143,6 @@ export default function App() {
     }),
     [W, tick, tab, refresh, save]
   );
-
-  useEffect(() => {
-    if (W && phase === 'game') save();
-  }, [tick]);
 
   let content;
   if (phase === 'title') content = <TitleScreen />;
@@ -149,7 +168,9 @@ export default function App() {
           <View style={s.tabbar}>
             {TABS.map((t) => (
               <Pressable key={t.key} style={s.tab} onPress={() => G.setTab(t.key)}>
-                <Text style={{ fontSize: 18, opacity: tab === t.key && !top ? 1 : 0.55 }}>{t.icon}</Text>
+                <View style={[s.tabIcon, tab === t.key && !top && { backgroundColor: C.accentDim }]}>
+                  <Text style={{ fontSize: 17, opacity: tab === t.key && !top ? 1 : 0.6 }}>{t.icon}</Text>
+                </View>
                 <Text style={[s.tabText, tab === t.key && !top && { color: C.accent }]}>{t.label}</Text>
               </Pressable>
             ))}
@@ -206,6 +227,7 @@ export default function App() {
 const s = StyleSheet.create({
   tabbar: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.line, backgroundColor: '#0f1713', paddingTop: 6, paddingBottom: 4 },
   tab: { flex: 1, alignItems: 'center', gap: 2 },
+  tabIcon: { width: 48, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   tabText: { color: C.muted, fontSize: 10, fontWeight: '600' },
   modalWrap: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 24 },
   modal: { backgroundColor: C.card, borderRadius: 18, padding: 18, borderWidth: 1, borderColor: C.line },

@@ -4,7 +4,6 @@ import { getState } from './engine/rng';
 const DB = 'brovka';
 const STORE = 'saves';
 const KEY = 'main';
-const round = (k, v) => (typeof v === 'number' && !Number.isInteger(v) ? Math.round(v * 10) / 10 : v);
 
 function open() {
   return new Promise((resolve, reject) => {
@@ -32,7 +31,7 @@ async function tx(mode, fn) {
 export async function saveGame(W) {
   try {
     W.rng = getState();
-    const s = JSON.stringify({ ...W, _stop: false }, round);
+    const s = JSON.stringify({ ...W, _stop: false });
     await tx('readwrite', (st) => st.put(s, KEY));
     return true;
   } catch (e) {

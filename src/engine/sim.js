@@ -3,7 +3,7 @@ import { LEAGUES, LEAGUE_BY_ID } from '../data/leagues';
 import { NATIONS, NATION_BY_CODE } from '../data/nations';
 import { rand, randInt, chance, pick, shuffle, weighted, gauss, getState, seed } from './rng';
 import { recalcOvr, playerValue, wageFor, clamp, POS_WEIGHTS, ATTRS, LINE, money, fmtDate, seasonLabel } from './util';
-import { createMatch, simulateFull, applyResults, winnerSide } from './match';
+import { createMatch, simulateFull, applyResults, winnerSide, quickMatch } from './match';
 import { buildSeason, buildFinals, recordResult, recordFriendly, koContext, sortRows, addFriendly } from './comps';
 import { INTL_DAYS, SUMMER_DAYS, isWindow, WINDOWS } from './fixtures';
 import { teamName, teamPool, teamTactic, isNat, natCode, isUserTeam, callUp, invalidateNatIndex, teamRep } from './teams';
@@ -25,7 +25,7 @@ export function newGame(W, { club, nation, name }) {
   W.user = {
     name: name || 'Тренер', club: club || null, nation: nation || null,
     rep: club ? clamp(W.clubs[club].rep - 8, 30, 90) : clamp((W.nations[nation]?.rep || 60) - 5, 30, 90),
-    conf: 65, natConf: 65, trophies: [], career: [], autoSubs: false, autoCall: false, target: null, natTarget: null,
+    conf: 65, natConf: 65, trophies: [], career: [], autoSubs: true, autoCall: false, target: null, natTarget: null,
   };
   buildSeason(W, null);
   startOfSeason(W, true);
@@ -102,7 +102,7 @@ function teamSpec(W, id) {
   const user = isUserTeam(W, id);
   return {
     ref: id, name: teamName(W, id), short: isNat(id) ? natCode(id) : W.clubs[id].short, pool, tac, mor,
-    isUser: user, autoSubs: user ? W.user.autoSubs : true,
+    isUser: user, autoSubs: user ? W.user.autoSubs !== false : true,
   };
 }
 
@@ -201,7 +201,7 @@ function playDayMatches(W) {
     for (const m of (st.rounds[e.r] || []).slice()) {
       if (m.hg !== null || !m.h || !m.a) continue;
       const S = prepareMatch(W, e, m, false);
-      simulateFull(W, S);
+      quickMatch(W, S);
       finalizeMatch(W, e, m, S);
     }
   }
@@ -282,11 +282,21 @@ function handleEvents(W) {
 }
 
 // ================= ежедневные процессы =================
+let plCache = null;
+let plKey = '';
+function playerList(W) {
+  const key = `${W.nextPid}:${W._natStamp || 0}`;
+  if (plCache && plKey === key) return plCache;
+  plCache = Object.values(W.players);
+  plKey = key;
+  return plCache;
+}
+
 function dailyTick(W) {
   const day = W.day;
   const userClub = W.user?.club ? W.clubs[W.user.club] : null;
-  for (const id in W.players) {
-    const p = W.players[id];
+  for (const p of playerList(W)) {
+    if (p.inj <= 0 && p.fit >= 100) continue;
     const club = p.club ? W.clubs[p.club] : null;
     const int = club?.training.int ?? 1;
     const med = club?.staff.med ?? 2;
@@ -298,7 +308,7 @@ function dailyTick(W) {
         if (userClub && p.club === userClub.id) mail(W, `${p.n} восстановился`, `${p.n} вернулся к тренировкам после травмы.`);
       }
     } else if (p.fit < 100) {
-      p.fit = Math.min(100, p.fit + 6.5 - int * 1.2);
+      p.fit = Math.min(100, Math.round(p.fit + 6.5 - int * 1.2));
     }
   }
   if (day % 7 === 4) weekly(W);
@@ -324,9 +334,9 @@ function dailyTick(W) {
 }
 
 function weekly(W) {
-  // тренировки и развитие
-  for (const id in W.players) {
-    const p = W.players[id];
+  // тренировки и развитие — раз в 4 недели (с учётом всех четырёх недель)
+  const monthly = Math.floor(W.day / 7) % 4 === 0;
+  if (monthly) for (const p of playerList(W)) {
     const club = p.club ? W.clubs[p.club] : null;
     const tf = club ? [0.82, 1, 1.15][club.training.int] * (0.9 + club.staff.coach * 0.04) : 0.9;
     let d;
@@ -335,20 +345,20 @@ function weekly(W) {
     else if (p.age <= 27) d = (p.pot - p.ovr) * 0.0025;
     else if (p.age <= 29) d = 0;
     else d = -(p.age - 29) * 0.022;
-    d = d * (d > 0 ? tf : 1 / tf) + gauss(0, 0.05);
+    d = (d * (d > 0 ? tf : 1 / tf) + gauss(0, 0.05)) * 4;
     if (p.inj > 20 && d > 0) d *= 0.5;
     if (Math.abs(d) < 0.001) continue;
     const w = POS_WEIGHTS[p.pos];
     for (const k of ATTRS) {
       const kw = w[k] || 0;
-      p.a[k] = clamp(p.a[k] + d * (kw > 0 ? 1 : 0.3) * (0.7 + rand() * 0.6), 5, 99);
+      p.a[k] = Math.round(clamp(p.a[k] + d * (kw > 0 ? 1 : 0.3) * (0.7 + rand() * 0.6), 5, 99) * 10) / 10;
     }
     recalcOvr(p);
     if (p.ovr > p.pot) p.pot = p.ovr;
     // мораль понемногу возвращается к норме
-    p.mor += (70 - p.mor) * 0.08;
+    p.mor = Math.round(p.mor + (70 - p.mor) * 0.28);
     // травмы на тренировках
-    if (club && p.inj <= 0 && chance(0.0015 * [0.6, 1, 1.6][club.training.int] * (6 - club.staff.med) / 3)) {
+    if (club && p.inj <= 0 && chance(0.006 * [0.6, 1, 1.6][club.training.int] * (6 - club.staff.med) / 3)) {
       p.inj = randInt(3, 21);
       if (W.user?.club === club.id) mail(W, `Травма: ${p.n}`, `${p.n} травмировался на тренировке и пропустит около ${Math.ceil(p.inj / 7)} нед.`);
     }
@@ -363,11 +373,11 @@ function weekly(W) {
     const L = c.league ? LEAGUE_BY_ID[c.league] : null;
     const tv = L ? (L.tv * 18e6 * (0.7 + 0.6 * clamp((c.rep - 50) / 50, 0, 1))) / 52 : 3e6 / 52;
     const sponsor = (Math.max(0, c.rep - 40) ** 2 * 18000) / 52;
-    c.balance += tv + sponsor - wages - staff;
-    c.fin.tv += tv;
-    c.fin.sponsor += sponsor;
-    c.fin.wages += wages;
-    c.fin.staff += staff;
+    c.balance = Math.round(c.balance + tv + sponsor - wages - staff);
+    c.fin.tv += Math.round(tv);
+    c.fin.sponsor += Math.round(sponsor);
+    c.fin.wages += Math.round(wages);
+    c.fin.staff += Math.round(staff);
   }
   const u = W.user;
   if (u?.club) {

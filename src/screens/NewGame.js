@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, Text } from 'react-native';
 import { C, Btn, T, Card, Row, Chips, Field, H } from '../ui/kit';
 import { useG } from '../ui/ctx';
@@ -7,6 +7,9 @@ import { NATIONS, NATION_BY_CODE, CONF_NAMES } from '../data/nations';
 import { createWorld } from '../engine/gen';
 import { newGame } from '../engine/sim';
 import { money } from '../engine/util';
+import { Seg } from '../ui/kit';
+import { REAL_SQUADS } from '../data/realSquads';
+import { loadCustomSquads, importSquadsFromFile, squadsStats } from '../squadsDb';
 
 const stars = (rep) => '★'.repeat(Math.max(1, Math.min(5, Math.round((rep - 50) / 9)))) ;
 
@@ -19,6 +22,11 @@ export default function NewGameScreen({ onBack }) {
   const [nation, setNation] = useState(null);
   const [name, setName] = useState('');
   const [step, setStep] = useState(0);
+  const [base, setBase] = useState('real');
+  const [custom, setCustom] = useState(null);
+  useEffect(() => {
+    loadCustomSquads().then((c) => { if (c) { setCustom(c); setBase('custom'); } });
+  }, []);
 
   const clubIndex = useMemo(() => {
     const out = {};
@@ -35,7 +43,8 @@ export default function NewGameScreen({ onBack }) {
 
   const start = () => {
     G.run('Создаём футбольный мир…', () => {
-      const W = createWorld(Math.floor(Math.random() * 1e9), 2026);
+      const squads = base === 'custom' && custom ? { ...REAL_SQUADS, ...custom } : base === 'real' ? REAL_SQUADS : null;
+      const W = createWorld(Math.floor(Math.random() * 1e9), 2026, squads);
       const clubId = needClub ? `c${clubIndex[league] + club}` : null;
       newGame(W, { club: clubId, nation: needNation ? nation : null, name: name.trim() || 'Тренер' });
       return W;
@@ -126,7 +135,23 @@ export default function NewGameScreen({ onBack }) {
         <Card title="Ваша новая работа">
           {needClub ? <T bold size={17}>🏟️ {L.clubs[club][0]}</T> : null}
           {needNation ? <T bold size={17} style={{ marginTop: 6 }}>{NATION_BY_CODE[nation].flag} Сборная: {NATION_BY_CODE[nation].name}</T> : null}
-          <T muted size={13} style={{ marginTop: 8 }}>Старт: 1 июля 2026, сезон 2026/27. Составы и игроки сгенерированы — свою базу можно загрузить через файл src/data/realSquads.js.</T>
+          <T muted size={13} style={{ marginTop: 8 }}>Старт: 1 июля 2026, сезон 2026/27.</T>
+        </Card>
+        <Card title="Игроки">
+          <Seg
+            options={[{ value: 'real', label: 'Реальные' }, ...(custom ? [{ value: 'custom', label: 'Мой файл' }] : []), { value: 'none', label: 'Вымышленные' }]}
+            value={base}
+            onChange={setBase}
+          />
+          <T muted size={12} style={{ marginTop: 8 }}>
+            {base === 'real' ? `Настоящие составы ${squadsStats(REAL_SQUADS).clubs} топ-клубов, остальные генерируются.` : base === 'custom' ? `Ваш файл: ${squadsStats(custom).clubs} клубов, ${squadsStats(custom).players} игроков (плюс встроенные).` : 'Все игроки сгенерированы.'}
+          </T>
+          <Btn small kind="ghost" title={custom ? 'Загрузить другой файл' : 'Загрузить свой файл'} style={{ marginTop: 10 }} onPress={async () => {
+            try {
+              const r = await importSquadsFromFile();
+              if (r) { setCustom(r.squads); setBase('custom'); }
+            } catch (e) { G.alert('Не удалось загрузить', String(e?.message || e)); }
+          }} />
         </Card>
         <Btn title="Начать карьеру" onPress={start} />
       </View>

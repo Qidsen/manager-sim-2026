@@ -183,7 +183,7 @@ export function FormDots({ form }) {
 }
 
 export const st = StyleSheet.create({
-  card: { backgroundColor: C.card, borderRadius: 14, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: C.line },
+  card: { backgroundColor: C.card, borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: C.line },
   cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   cardTitle: { color: C.muted, fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' },
   btn: { paddingVertical: 13, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
@@ -196,7 +196,7 @@ export const st = StyleSheet.create({
   chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: C.card2, borderWidth: 1, borderColor: C.line },
   chipOn: { backgroundColor: C.accent, borderColor: C.accent },
   chipText: { color: C.text, fontSize: 13, fontWeight: '600' },
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.line, gap: 10 },
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.line, gap: 10 },
   rating: { borderWidth: 1.5, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
   ratingText: { fontWeight: '800' },
   h: { color: C.text, fontSize: 22, fontWeight: '800', marginBottom: 12 },

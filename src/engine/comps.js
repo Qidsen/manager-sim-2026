@@ -240,6 +240,7 @@ function finishComp(W, comp) {
 function payPrize(W, clubId, amount) {
   const c = W.clubs[clubId];
   if (!c || !amount) return;
+  amount = Math.round(amount);
   c.balance += amount;
   c.fin.prize += amount;
 }

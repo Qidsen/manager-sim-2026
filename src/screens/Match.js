@@ -4,7 +4,7 @@ import { C, T, Card, Btn, Seg, Bar, Rating, ratingColor } from '../ui/kit';
 import { useG } from '../ui/ctx';
 import { userMatchToday, prepareMatch, finalizeMatch } from '../engine/sim';
 import { stepMinute, simulateFull, doSub } from '../engine/match';
-import { teamName, teamFlag, isUserTeam, isNat } from '../engine/teams';
+import { teamName, teamFlag, teamColor, isUserTeam, isNat } from '../engine/teams';
 import { FORMATIONS, MENTALITY, POS_RU, slotRating, fmtDate } from '../engine/util';
 import { PosBadge } from '../ui/playerRow';
 
@@ -103,24 +103,52 @@ export default function MatchScreen() {
 
   const side = me === 0 ? s.h : s.a;
   const totalPoss = s.poss[0] + s.poss[1];
+  const pct0 = Math.round((s.poss[0] / totalPoss) * 100);
+  const scorers = (si) => s.goals.filter((g) => g[1] === si).map((g) => `${(W.players[g[2]]?.n || '').split(' ').slice(-1)[0]} ${g[0]}'`).join(', ');
   const header = (
-    <View style={{ padding: 14, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: C.line }}>
-      <T muted center size={12} numberOfLines={1}>{title}</T>
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
-        <T bold size={15} style={{ flex: 1, textAlign: 'right' }} numberOfLines={2} color={me === 0 ? C.accent : C.text}>{s.h.name}</T>
-        <View style={{ alignItems: 'center', marginHorizontal: 12 }}>
-          <Text style={{ color: C.text, fontSize: 34, fontWeight: '900' }}>{s.score[0]}:{s.score[1]}</Text>
-          {s.pens ? <T size={12} muted>пен. {s.pens[0]}:{s.pens[1]}</T> : null}
-          <T size={13} color={C.gold} bold>{s.done ? 'Конец' : `${Math.min(s.min, s.phase === 'et' ? 120 : 90)}'`}</T>
+    <View style={{ backgroundColor: '#111a15', borderBottomWidth: 1, borderBottomColor: C.line }}>
+      <View style={{ flexDirection: 'row', height: 4 }}>
+        <View style={{ flex: 1, backgroundColor: me === 0 ? C.accent : teamColor(W, m.h) }} />
+        <View style={{ flex: 1, backgroundColor: me === 1 ? C.accent : teamColor(W, m.a) }} />
+      </View>
+      <View style={{ padding: 14, paddingBottom: 10 }}>
+        <T muted center size={11} numberOfLines={1}>{title.toUpperCase()}</T>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10 }}>
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <Text style={{ fontSize: 26 }}>{teamFlag(W, m.h)}</Text>
+            <T bold size={14} center numberOfLines={2} color={me === 0 ? C.accent : C.text} style={{ marginTop: 4 }}>{s.h.name}</T>
+          </View>
+          <View style={{ alignItems: 'center', minWidth: 110 }}>
+            <View style={{ backgroundColor: C.bg, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 4, borderWidth: 1, borderColor: C.line }}>
+              <Text style={{ color: C.text, fontSize: 38, fontWeight: '900', fontVariant: ['tabular-nums'] }}>{s.score[0]}:{s.score[1]}</Text>
+            </View>
+            {s.pens ? <T size={12} muted style={{ marginTop: 2 }}>пен. {s.pens[0]}:{s.pens[1]}</T> : null}
+            <View style={{ marginTop: 6, backgroundColor: s.done ? C.card2 : C.gold, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 }}>
+              <Text style={{ color: s.done ? C.muted : '#000', fontWeight: '800', fontSize: 12 }}>{s.done ? 'КОНЕЦ' : `${Math.min(s.min, s.phase === 'et' ? 120 : 90)}'`}</Text>
+            </View>
+          </View>
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <Text style={{ fontSize: 26 }}>{teamFlag(W, m.a)}</Text>
+            <T bold size={14} center numberOfLines={2} color={me === 1 ? C.accent : C.text} style={{ marginTop: 4 }}>{s.a.name}</T>
+          </View>
         </View>
-        <T bold size={15} style={{ flex: 1 }} numberOfLines={2} color={me === 1 ? C.accent : C.text}>{s.a.name}</T>
+        {s.goals.length ? (
+          <View style={{ flexDirection: 'row', marginTop: 8, gap: 10 }}>
+            <T size={11} muted style={{ flex: 1, textAlign: 'center' }} numberOfLines={2}>{scorers(0)}</T>
+            <T size={11} muted style={{ flex: 1, textAlign: 'center' }} numberOfLines={2}>{scorers(1)}</T>
+          </View>
+        ) : null}
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 8 }}>
+          <T size={11} bold style={{ width: 32 }}>{pct0}%</T>
+          <View style={{ flex: 1, height: 6, borderRadius: 3, overflow: 'hidden', flexDirection: 'row', backgroundColor: C.line }}>
+            <View style={{ width: `${pct0}%`, backgroundColor: me === 0 ? C.accent : C.blue }} />
+            <View style={{ flex: 1, backgroundColor: me === 1 ? C.accent : C.blue, opacity: 0.55 }} />
+          </View>
+          <T size={11} bold style={{ width: 32, textAlign: 'right' }}>{100 - pct0}%</T>
+        </View>
+        <T size={11} muted center style={{ marginTop: 4 }}>владение · удары {s.shots[0]} ({s.sot[0]}) — {s.shots[1]} ({s.sot[1]})</T>
       </View>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-        <T size={12} muted>Владение {Math.round((s.poss[0] / totalPoss) * 100)}%</T>
-        <T size={12} muted>Удары {s.shots[0]}({s.sot[0]}) – {s.shots[1]}({s.sot[1]})</T>
-        <T size={12} muted>{Math.round((s.poss[1] / totalPoss) * 100)}%</T>
-      </View>
-      <Bar value={s.min} max={s.phase === 'et' || s.min > 90 ? 120 : 90} color={C.gold} height={3} style={{ marginTop: 8 }} />
+      <Bar value={s.min} max={s.phase === 'et' || s.min > 90 ? 120 : 90} color={C.gold} height={3} style={{ borderRadius: 0 }} />
     </View>
   );
 
@@ -203,7 +231,7 @@ export default function MatchScreen() {
         </ScrollView>
       ) : null}
       <FlatList
-        data={s.ev.slice().reverse()}
+        data={s.ev.slice(-80).reverse()}
         keyExtractor={(_, i) => String(s.ev.length - i)}
         contentContainerStyle={{ padding: 12, paddingBottom: 30 }}
         renderItem={({ item }) => (

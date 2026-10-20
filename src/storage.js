@@ -2,13 +2,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getState } from './engine/rng';
 
 const KEY = 'brovka_save_v1';
-const round = (k, v) => (typeof v === 'number' && !Number.isInteger(v) ? Math.round(v * 10) / 10 : v);
 
 export async function saveGame(W) {
   try {
     W.rng = getState();
     const clean = { ...W, _stop: false };
-    await AsyncStorage.setItem(KEY, JSON.stringify(clean, round));
+    await AsyncStorage.setItem(KEY, JSON.stringify(clean));
     return true;
   } catch (e) {
     console.warn('save failed', e);

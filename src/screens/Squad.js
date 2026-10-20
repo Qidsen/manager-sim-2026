@@ -39,7 +39,13 @@ export default function SquadScreen() {
       </View>
       <Seg options={[{ value: 'squad', label: 'Состав' }, { value: 'stats', label: 'Статистика' }, { value: 'money', label: 'Контракты' }]} value={seg} onChange={setSeg} style={{ marginBottom: 6 }} />
       <T muted size={12} style={{ marginVertical: 6 }}>Средний рейтинг: {avg}</T>
-      {list.map((p) => {
+      {list.map((p, idx) => {
+        const line = LINE[p.pos];
+        const head = idx === 0 || LINE[list[idx - 1].pos] !== line ? (
+          <T key={`h${line}`} muted bold size={11} style={{ marginTop: 14, marginBottom: 2, letterSpacing: 1 }}>
+            {{ G: 'ВРАТАРИ', D: 'ЗАЩИТНИКИ', M: 'ПОЛУЗАЩИТНИКИ', A: 'НАПАДАЮЩИЕ' }[line]}
+          </T>
+        ) : null;
         let right = null;
         if (seg === 'stats') {
           const r = playerAvgRating(p);
@@ -56,7 +62,12 @@ export default function SquadScreen() {
             </View>
           );
         }
-        return <PlayerRow key={p.id} p={p} right={right} onPress={() => G.push('player', { id: p.id })} sub={!isClub ? (p.club ? W.clubs[p.club]?.short : '') : null} />;
+        return (
+          <React.Fragment key={p.id}>
+            {head}
+            <PlayerRow p={p} right={right} onPress={() => G.push('player', { id: p.id })} sub={!isClub ? (p.club ? W.clubs[p.club]?.short : '') : null} />
+          </React.Fragment>
+        );
       })}
       {isClub && W.clubs[cur].academy.length ? (
         <Card title="Академия" style={{ marginTop: 14 }} onPress={() => G.push('club', { tab: 'academy' })} right={<T muted size={12}>Открыть ›</T>}>

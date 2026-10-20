@@ -43,7 +43,7 @@ export function makePlayer(W, { pos, ovr, age, nat, pot, club = null, name, wage
     else if (key >= 0.2) v = ovr + 2 + gauss(0, 4);
     else if (key > 0) v = ovr - 3 + gauss(0, 5);
     else v = ovr - 14 + gauss(0, 7);
-    a[k] = clamp(v, 10, 99);
+    a[k] = Math.round(clamp(v, 10, 99) * 10) / 10;
   }
   const p = { id, n: name || randomName(nat), nat, age, pos, a, ovr: 0, pot: 0, club, wage: 0, contract: 0, fit: 100, mor: 70, inj: 0, st: newStats(), car: { app: 0, g: 0 }, caps: 0, ng: 0 };
   // подгоняем ключевые атрибуты под целевой рейтинг
@@ -51,7 +51,7 @@ export function makePlayer(W, { pos, ovr, age, nat, pot, club = null, name, wage
   for (let it = 0; it < 3; it++) {
     const diff = ovr - p.ovr;
     if (Math.abs(diff) < 0.5) break;
-    for (const k in w) p.a[k] = clamp(p.a[k] + diff, 10, 99);
+    for (const k in w) p.a[k] = Math.round(clamp(p.a[k] + diff, 10, 99) * 10) / 10;
     recalcOvr(p);
   }
   if (pot === undefined || pot === null) {
@@ -99,8 +99,8 @@ function natWeightFor(club, slotOvr, leagueDef) {
   return list;
 }
 
-function genClubSquad(W, club, leagueDef) {
-  const real = REAL_SQUADS[club.name];
+function genClubSquad(W, club, leagueDef, squads) {
+  const real = squads ? squads[club.name] : null;
   if (real && real.length) {
     for (const [name, pos, age, ovr, pot, nat] of real) {
       const p = makePlayer(W, { pos, ovr, age, nat: nat || club.country, pot, club: club.id, name, wageRep: club.rep });
@@ -131,7 +131,7 @@ function genClubSquad(W, club, leagueDef) {
   }
 }
 
-export function createWorld(seedValue = Date.now() % 1e9, year = 2026) {
+export function createWorld(seedValue = Date.now() % 1e9, year = 2026, squads = REAL_SQUADS) {
   seed(seedValue);
   const W = {
     v: 1, year, day: 0, nextPid: 1, rng: 0,
@@ -157,7 +157,7 @@ export function createWorld(seedValue = Date.now() % 1e9, year = 2026) {
     const L = c.league ? LEAGUES.find((l) => l.id === c.league) : null;
     const demand = 0.4 + 0.6 * Math.min(1, (L ? L.tv : 0.1) / 0.8);
     c.stadium.price = Math.round((10 + c.rep * 0.5) * (0.5 + 0.5 * demand));
-    genClubSquad(W, c, L);
+    genClubSquad(W, c, L, squads);
   }
   // сборные
   for (const n of NATIONS) {
