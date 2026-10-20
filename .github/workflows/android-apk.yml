@@ -1,0 +1,43 @@
+name: Сборка APK для Android
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - run: npm ci
+
+      - name: Собрать APK в облаке Expo
+        run: eas build --platform android --profile apk --non-interactive --wait --json > build.json
+
+      - name: Сохранить ссылку на APK
+        run: |
+          cat build.json
+          URL=$(node -p "const b=require('./build.json'); (Array.isArray(b)?b[0]:b).artifacts.buildUrl")
+          PAGE=$(node -p "const b=require('./build.json'); const x=Array.isArray(b)?b[0]:b; 'https://expo.dev/accounts/qidsen-studio/projects/manager-sim-2026/builds/'+x.id")
+          printf '# Manager Sim 2026 для Android\n\nСкачать APK: %s\n\nСтраница сборки (с QR-кодом): %s\n\nОбновления игры приходят автоматически.\n' "$URL" "$PAGE" > ANDROID.md
+          echo "$URL" >> "$GITHUB_STEP_SUMMARY"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase
+          git add ANDROID.md
+          git diff --cached --quiet || git commit -m "Ссылка на APK [skip ci]"
+          git push
