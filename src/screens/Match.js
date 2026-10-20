@@ -382,13 +382,15 @@ export default function MatchScreen() {
                     </Pressable>
                   );
                 })
-              : side.bench.map((id) => {
+              : side.bench.slice().sort((x, y) => { const sp = slots[side.xi.indexOf(subOut)]?.[0]; return sp ? slotRating(W.players[y], sp) - slotRating(W.players[x], sp) : 0; }).map((id) => {
                   const p = W.players[id];
                   const slotPos = slots[side.xi.indexOf(subOut)]?.[0];
+                  const bf = side.fit[id] ?? p.fit;
                   return (
                     <Pressable key={id} onPress={() => { thud(); doSub(W, s, me, subOut, id); setSubOut(null); setN((n) => n + 1); }} style={st.subRow}>
                       <PosBadge pos={p.pos} size="sm" />
                       <T size={14} style={{ flex: 1 }} numberOfLines={1}>{p.n}</T>
+                      <Bar value={bf} color={bf < 65 ? C.red : bf < 78 ? C.orange : C.accent} style={{ width: 40 }} />
                       <T size={12} muted>на {POS_RU[slotPos]}</T>
                       <Rating v={slotPos ? Math.round(slotRating(p, slotPos)) : p.ovr} size="sm" />
                     </Pressable>

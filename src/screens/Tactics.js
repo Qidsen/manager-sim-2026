@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, Pressable, TextInput, useWindowDimensions } from 'react-native';
 import { C, T, Seg, Chips, Card, Btn, ratingColor, F, Icon } from '../ui/kit';
 import Page from '../ui/page';
 import { useG } from '../ui/ctx';
 import PlayerRow from '../ui/playerRow';
+import { dynDelta } from '../engine/util';
+import { PosBadge } from '../ui/playerRow';
+import { Bar } from '../ui/kit';
 import { FORMATIONS, MENTALITY, PRESSING, TEMPO, POS_RU, POS_FULL, slotRating, BASE_FORMATIONS, customKey, registerCustomFormations, posFromSpot, NEAR } from '../engine/util';
 import { resolveLineup, autoLineup } from '../engine/match';
 import { teamPool, teamTactic, teamName } from '../engine/teams';
@@ -22,7 +25,7 @@ export function Pitch({ W, form, xi, selected, onSlot, width }) {
       <View style={{ position: 'absolute', left: width * 0.25, width: width * 0.5, top: 0, height: h * 0.14, borderWidth: 2, borderColor: C.pitchLine, borderTopWidth: 0 }} />
       {slots.map(([pos, x, y], i) => {
         const p = xi[i] ? W.players[xi[i]] : null;
-        const r = p ? Math.round(slotRating(p, pos)) : 0;
+        const r = p ? Math.round(slotRating(p, pos) + dynDelta(p)) : 0;
         const sel = selected === i;
         const left = x * width - 34;
         const top = (1 - y) * h - 26 - (y < 0.1 ? 12 : 0);
@@ -34,7 +37,8 @@ export function Pitch({ W, form, xi, selected, onSlot, width }) {
             <Text numberOfLines={1} style={{ color: '#fff', fontSize: 12, fontFamily: F.d7, marginTop: 2, textShadowColor: '#000', textShadowRadius: 4 }}>
               {p ? p.n.split(' ').slice(-1)[0] : 'пусто'}
             </Text>
-            <Text style={{ color: '#cfe8d6', fontSize: 9 }}>{POS_RU[pos]}{p && p.pos !== pos ? ` (${POS_RU[p.pos]})` : ''}</Text>
+            {p ? <View style={{ width: 34, height: 3, borderRadius: 2, backgroundColor: 'rgba(0,0,0,0.4)', marginTop: 2 }}><View style={{ width: `${Math.max(0, Math.min(100, p.fit))}%`, height: 3, borderRadius: 2, backgroundColor: p.fit < 65 ? C.red : p.fit < 80 ? C.orange : C.accent }} /></View> : null}
+            <Text style={{ color: '#cfe8d6', fontSize: 9 }}>{POS_RU[pos]}{p && p.pos !== pos && !(p.alt || []).includes(pos) ? ` (${POS_RU[p.pos]})` : ''}</Text>
           </Pressable>
         );
       })}
@@ -69,6 +73,22 @@ export function TacticsBody({ team }) {
     commit(xi, lu.bench);
   };
 
+  // поставить игрока на выбранную позицию: меняется местами с тем, кто там стоял
+  const place = (pid) => {
+    const xi = lu.xi.slice();
+    let bench = lu.bench.slice();
+    const out = xi[sel];
+    const j = xi.indexOf(pid);
+    if (j >= 0) { xi[j] = out; xi[sel] = pid; }
+    else {
+      xi[sel] = pid;
+      const b = bench.indexOf(pid);
+      if (b >= 0) { if (out) bench[b] = out; else bench.splice(b, 1); }
+    }
+    setSel(null);
+    commit(xi, bench.slice(0, 9));
+  };
+
   const onBench = (pid) => {
     if (sel === null) return G.push('player', { id: pid });
     const xi = lu.xi.slice();
@@ -92,9 +112,11 @@ export function TacticsBody({ team }) {
       </View>
       {edit ? <FormationEditor W={W} G={G} tac={tac} width={Math.min(width - 28, 420)} onClose={() => setEdit(false)} /> : null}
       <Pitch W={W} form={tac.form} xi={lu.xi} selected={sel} onSlot={onSlot} width={Math.min(width - 28, 420)} />
-      <T muted size={12} center style={{ marginVertical: 8 }}>
-        {sel === null ? 'Нажмите на игрока на поле, затем на другого игрока или запасного, чтобы поменять их местами.' : 'Выберите, кого поставить на эту позицию.'}
-      </T>
+      {sel === null ? (
+        <T muted size={12} center style={{ marginVertical: 8 }}>Нажмите на игрока на поле — появится список, кем его заменить.</T>
+      ) : (
+        <Candidates W={W} slots={FORMATIONS[tac.form]} sel={sel} lu={lu} pool={pool} onPick={(pid) => place(pid)} onClose={() => setSel(null)} />
+      )}
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
         <Btn small title={tac.auto ? '✓ Автосостав включён' : 'Включить автосостав'} kind={tac.auto ? 'primary' : 'ghost'} style={{ flex: 1 }} onPress={() => { tac.auto = !tac.auto; if (tac.auto) { tac.xi = null; tac.bench = null; } G.refresh(); }} />
         <Btn small title="Лучшие 11" kind="ghost" style={{ flex: 1 }} onPress={() => { const a = autoLineup(W, pool, tac.form); commit(a.xi, a.bench); }} />
@@ -160,42 +182,96 @@ export function TacticsBody({ team }) {
   );
 }
 
-// Редактор своей схемы: выберите точку — затем место на поле, куда её поставить.
+// Редактор своей схемы: поле разбито на линии и колонки — игроки встают ровно.
+const ROWS = [
+  { y: 0.2, ru: 'Защита' },
+  { y: 0.34, ru: 'Опорная зона' },
+  { y: 0.48, ru: 'Центр поля' },
+  { y: 0.62, ru: 'Атакующая зона' },
+  { y: 0.8, ru: 'Нападение' },
+];
+const COLS = [0.1, 0.23, 0.37, 0.5, 0.63, 0.77, 0.9];
+const nearestRow = (y) => ROWS.reduce((b, r, i) => (Math.abs(r.y - y) < Math.abs(ROWS[b].y - y) ? i : b), 0);
+const nearestCol = (x) => COLS.reduce((b, c, i) => (Math.abs(c - x) < Math.abs(COLS[b] - x) ? i : b), 0);
+// ровная симметричная расстановка n игроков в линии
+function rowXs(n, ri) {
+  if (n <= 1) return [0.5];
+  if (n === 2) return [0.34, 0.66];
+  if (n === 3) return ri <= 2 ? [0.3, 0.5, 0.7] : [0.2, 0.5, 0.8];
+  if (n === 4) return [0.12, 0.37, 0.63, 0.88];
+  return [0.1, 0.3, 0.5, 0.7, 0.9];
+}
+function align(slots) {
+  const next = slots.map((s) => s.slice());
+  ROWS.forEach((r, ri) => {
+    const idx = next.map((s, i) => i).filter((i) => i > 0 && nearestRow(next[i][2]) === ri).sort((a, b) => next[a][1] - next[b][1]);
+    const xs = rowXs(idx.length, ri);
+    idx.forEach((i, k) => {
+      const s = next[i];
+      s[1] = xs[k];
+      s[2] = r.y;
+      if (!s[3]) s[0] = posFromSpot(s[1], s[2]);
+    });
+  });
+  next[0] = ['GK', 0.5, 0.04];
+  return next;
+}
+const rowCount = (slots, ri) => slots.filter((s, i) => i > 0 && nearestRow(s[2]) === ri).length;
+
 function FormationEditor({ W, G, tac, width, onClose }) {
   const isCustom = !BASE_FORMATIONS.includes(tac.form);
-  const [slots, setSlots] = useState(() => FORMATIONS[tac.form].map((s) => s.slice()));
+  const [auto, setAuto] = useState(true);
+  const [slots, setSlots] = useState(() => align(FORMATIONS[tac.form].map((s) => s.slice(0, 3))));
   const [sel, setSel] = useState(null);
   const [name, setName] = useState(isCustom ? tac.form.replace(/^★ /, '') : `Моя ${tac.form}`);
   const h = width * 1.15;
+  const yPx = (y) => (1 - y) * h;
 
-  const place = (e) => {
+  const pitchRef = useRef(null);
+  const onPitchPress = (e) => {
     if (sel === null || sel === 0) return;
-    const { locationX, locationY } = e.nativeEvent;
-    const x = Math.max(0.06, Math.min(0.94, locationX / width));
-    const y = Math.max(0.14, Math.min(0.92, 1 - locationY / h));
-    const pos = posFromSpot(x, y);
-    const next = slots.slice();
-    next[sel] = [pos === 'GK' ? 'CB' : pos, +x.toFixed(3), +y.toFixed(3)];
+    const { pageX, pageY } = e.nativeEvent;
+    pitchRef.current?.measure((x, y, w, hh, px, py) => place(pageX - px, pageY - py));
+  };
+  const place = (locationX, locationY) => {
+    const ri = nearestRow(1 - locationY / h);
+    const cur = nearestRow(slots[sel][2]);
+    if (ri !== cur && rowCount(slots, ri) >= 5) return G.alert('Линия заполнена', 'В одной линии может быть не больше 5 игроков.');
+    let next = slots.map((s) => s.slice());
+    if (auto) {
+      next[sel] = [next[sel][0], locationX / width, ROWS[ri].y];
+      next[sel][3] = undefined;
+      next = align(next);
+    } else {
+      const x = COLS[nearestCol(locationX / width)];
+      const y = ROWS[ri].y;
+      const other = next.findIndex((s, i) => i > 0 && i !== sel && Math.abs(s[1] - x) < 0.01 && Math.abs(s[2] - y) < 0.01);
+      if (other > 0) { next[other][1] = next[sel][1]; next[other][2] = next[sel][2]; if (!next[other][3]) next[other][0] = posFromSpot(next[other][1], next[other][2]); }
+      next[sel] = [posFromSpot(x, y), x, y];
+    }
     setSlots(next);
   };
   const setPos = (pos) => {
     if (sel === null || sel === 0) return;
-    const next = slots.slice();
-    next[sel] = [pos, next[sel][1], next[sel][2]];
+    const next = slots.map((s) => s.slice());
+    next[sel][0] = pos;
+    next[sel][3] = 'm';
     setSlots(next);
   };
-  const shape = (() => {
-    const d = slots.slice(1).filter((s) => s[2] < 0.36).length;
-    const m = slots.slice(1).filter((s) => s[2] >= 0.36 && s[2] < 0.72).length;
-    return `${d}-${m}-${10 - d - m}`;
-  })();
+  const toggleAuto = () => {
+    const v = !auto;
+    setAuto(v);
+    if (v) setSlots(align(slots));
+  };
+  const counts = ROWS.map((_, ri) => rowCount(slots, ri));
+  const shape = counts.filter(Boolean).join('-');
   const save = () => {
     const nm = name.trim().slice(0, 18);
     if (!nm) return G.alert('Название', 'Введите название схемы.');
     if (BASE_FORMATIONS.includes(customKey(nm))) return G.alert('Название', 'Такое имя занято.');
     W.customForms ||= {};
     if (isCustom && tac.form !== customKey(nm)) delete W.customForms[tac.form.replace(/^★ /, '')];
-    W.customForms[nm] = slots;
+    W.customForms[nm] = slots.map((s) => [s[0], +(+s[1]).toFixed(3), +(+s[2]).toFixed(3)]);
     registerCustomFormations(W);
     tac.form = customKey(nm);
     if (tac.auto) tac.xi = null;
@@ -214,26 +290,33 @@ function FormationEditor({ W, G, tac, width, onClose }) {
     });
   };
   const cur = sel !== null ? slots[sel] : null;
-  const opts = cur && cur[0] !== 'GK' ? [cur[0], ...(NEAR[cur[0]] || []), posFromSpot(cur[1], cur[2])].filter((v, i, a) => v !== 'GK' && a.indexOf(v) === i) : [];
+  const opts = cur && sel !== 0 ? [posFromSpot(cur[1], cur[2]), cur[0], ...(NEAR[posFromSpot(cur[1], cur[2])] || [])].filter((v, i, a) => v !== 'GK' && a.indexOf(v) === i) : [];
 
   return (
     <Card title={`Редактор схемы · ${shape}`} icon="construct-outline">
       <T muted size={12} style={{ marginBottom: 8 }}>
-        {sel === null ? 'Нажмите на точку, затем на место на поле, куда её передвинуть.' : sel === 0 ? 'Вратарь всегда стоит в воротах.' : 'Теперь нажмите на поле — игрок переместится туда.'}
+        {sel === null ? 'Нажмите на игрока, затем на линию, куда его поставить.' : sel === 0 ? 'Вратарь всегда стоит в воротах.' : auto ? 'Нажмите на нужную линию — игроки в ней выстроятся ровно и симметрично.' : 'Нажмите на клетку сетки.'}
       </T>
+      <Seg options={[{ value: true, label: 'Ровные линии' }, { value: false, label: 'Свободная сетка' }]} value={auto} onChange={(v) => v !== auto && toggleAuto()} style={{ marginBottom: 10 }} />
       <View style={{ width, height: h, backgroundColor: C.pitch, borderRadius: 18, overflow: 'hidden', alignSelf: 'center', borderWidth: 2, borderColor: C.gold }}>
-        <Pressable onPress={place} style={{ position: 'absolute', left: 0, top: 0, width, height: h }}>
+        <Pressable ref={pitchRef} onPress={onPitchPress} style={{ position: 'absolute', left: 0, top: 0, width, height: h }}>
           {Array.from({ length: 10 }).map((_, i) => (
             <View key={`s${i}`} pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: (h / 10) * i, height: h / 10, backgroundColor: i % 2 ? C.pitch2 : C.pitch }} />
           ))}
-          <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: h / 2, height: 2, backgroundColor: C.pitchLine }} />
-          <View pointerEvents="none" style={{ position: 'absolute', left: width / 2 - 40, top: h / 2 - 40, width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: C.pitchLine }} />
           <View pointerEvents="none" style={{ position: 'absolute', left: width * 0.25, width: width * 0.5, bottom: 0, height: h * 0.14, borderWidth: 2, borderColor: C.pitchLine, borderBottomWidth: 0 }} />
+          {ROWS.map((r, ri) => (
+            <View key={ri} pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: yPx(r.y) - 1, height: 2, backgroundColor: sel !== null && sel !== 0 ? 'rgba(255,181,71,0.45)' : 'rgba(255,255,255,0.13)' }}>
+              <Text style={{ position: 'absolute', left: 6, top: -34, color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '700' }}>{r.ru.toUpperCase()} · {counts[ri]}</Text>
+            </View>
+          ))}
+          {!auto ? ROWS.map((r, ri) => COLS.map((c, ci) => (
+            <View key={`${ri}-${ci}`} pointerEvents="none" style={{ position: 'absolute', left: c * width - 3, top: yPx(r.y) - 3, width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.35)' }} />
+          ))) : null}
         </Pressable>
         {slots.map(([pos, x, y], i) => {
           const on = sel === i;
           return (
-            <Pressable key={i} onPress={() => setSel(on ? null : i)} hitSlop={6} style={{ position: 'absolute', left: x * width - 22, top: Math.min(h - 48, (1 - y) * h - 22), width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? C.gold : 'rgba(5,8,15,0.85)', borderWidth: 2.5, borderColor: on ? '#fff' : C.pitchLine }}>
+            <Pressable key={i} onPress={() => setSel(on ? null : i)} hitSlop={4} style={{ position: 'absolute', left: x * width - 21, top: Math.min(h - 46, yPx(y) - 21), width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? C.gold : 'rgba(5,8,15,0.88)', borderWidth: 2.5, borderColor: on ? '#fff' : C.pitchLine }}>
               <Text style={{ color: on ? '#1A1206' : '#fff', fontFamily: F.d7, fontSize: 13 }}>{POS_RU[pos]}</Text>
             </Pressable>
           );
@@ -241,7 +324,7 @@ function FormationEditor({ W, G, tac, width, onClose }) {
       </View>
       {opts.length ? (
         <>
-          <T muted size={12} style={{ marginTop: 10, marginBottom: 6 }}>Роль точки: {POS_FULL[cur[0]]}</T>
+          <T muted size={12} style={{ marginTop: 10, marginBottom: 6 }}>Роль игрока: {POS_FULL[cur[0]]}</T>
           <Chips options={opts.map((o) => ({ value: o, label: POS_RU[o] }))} value={cur[0]} onChange={setPos} />
         </>
       ) : null}
@@ -262,5 +345,52 @@ export default function TacticsScreen({ team }) {
     <Page title="Тактика" sub={teamName(G.W, team)} back>
       <TacticsBody team={team} />
     </Page>
+  );
+}
+
+// Кандидаты на выбранную позицию: все доступные игроки, лучшие для этой позиции — сверху
+function Candidates({ W, slots, sel, lu, pool, onPick, onClose }) {
+  const [all, setAll] = useState(false);
+  const pos = slots[sel][0];
+  const curId = lu.xi[sel];
+  const cur = curId ? W.players[curId] : null;
+  const bench = new Set(lu.bench);
+  const list = pool
+    .map((id) => W.players[id])
+    .filter((p) => p && p.id !== curId && p.inj <= 0 && !(p.ban > 0))
+    .map((p) => ({ p, r: Math.round(slotRating(p, pos) + dynDelta(p)), xiAt: lu.xi.indexOf(p.id) }))
+    .sort((a, b) => b.r - a.r);
+  const shown = all ? list : list.slice(0, 8);
+  const tag = (x) => (x.xiAt >= 0 ? [`основа · ${POS_RU[slots[x.xiAt][0]]}`, C.accent] : bench.has(x.p.id) ? ['запас', C.gold] : ['резерв', C.muted]);
+  return (
+    <Card style={{ marginTop: 10, borderColor: C.gold + '66' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+        <T bold size={15} style={{ flex: 1 }}>Позиция {POS_RU[pos]}: кого поставить?</T>
+        <Pressable onPress={onClose} hitSlop={8}><Icon name="close" size={20} color={C.muted} /></Pressable>
+      </View>
+      {cur ? <T muted size={12} style={{ marginBottom: 6 }}>Сейчас: {cur.n} · {Math.round(slotRating(cur, pos) + dynDelta(cur))} на позиции · свежесть {Math.round(cur.fit)}%</T> : null}
+      {shown.map((x) => {
+        const [tg, tc] = tag(x);
+        const better = cur ? x.r - Math.round(slotRating(cur, pos) + dynDelta(cur)) : null;
+        return (
+          <Pressable key={x.p.id} onPress={() => onPick(x.p.id)} style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderBottomWidth: 0.5, borderBottomColor: C.line }, pressed && { backgroundColor: C.card2 }]}>
+            <PosBadge pos={x.p.pos} size="sm" />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <T size={14} numberOfLines={1}>{x.p.n}</T>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                <Text style={{ color: tc, fontSize: 11, fontWeight: '800' }}>{tg}</Text>
+                <Bar value={x.p.fit} height={3} color={x.p.fit < 65 ? C.red : x.p.fit < 80 ? C.orange : C.accent} style={{ width: 40 }} />
+              </View>
+            </View>
+            {better !== null && better !== 0 ? <Text style={{ color: better > 0 ? C.accent : C.red, fontSize: 12, fontWeight: '800' }}>{better > 0 ? `+${better}` : better}</Text> : null}
+            <View style={{ minWidth: 36, paddingVertical: 4, borderRadius: 8, alignItems: 'center', backgroundColor: ratingColor(x.r) + '22', borderWidth: 1, borderColor: ratingColor(x.r) + '88' }}>
+              <Text style={{ color: ratingColor(x.r), fontFamily: F.d8, fontSize: 16 }}>{x.r}</Text>
+            </View>
+          </Pressable>
+        );
+      })}
+      {list.length > 8 ? <Btn small kind="ghost" title={all ? 'Свернуть' : `Показать всех (${list.length})`} style={{ marginTop: 8 }} onPress={() => setAll(!all)} /> : null}
+      <T muted size={11} style={{ marginTop: 8 }}>Число — рейтинг игрока именно на этой позиции с учётом формы. Игрок из основы поменяется позициями, запасной — местами со скамейкой.</T>
+    </Card>
   );
 }
