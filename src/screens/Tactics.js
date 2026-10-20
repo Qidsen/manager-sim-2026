@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, TextInput, useWindowDimensions } from 'react-native';
-import { C, T, Seg, Chips, Card, Btn, ratingColor, F } from '../ui/kit';
+import { C, T, Seg, Chips, Card, Btn, ratingColor, F, Icon } from '../ui/kit';
 import Page from '../ui/page';
 import { useG } from '../ui/ctx';
 import PlayerRow from '../ui/playerRow';
@@ -50,6 +50,7 @@ export function TacticsBody({ team }) {
   const pool = teamPool(W, team);
   const [sel, setSel] = useState(null); // индекс слота
   const [edit, setEdit] = useState(false);
+  const [swapIn, setSwapIn] = useState(null); // игрок из резерва ждёт, кого из запасных заменить
   const lu = resolveLineup(W, pool, tac);
 
   const commit = (xi, bench) => {
@@ -107,15 +108,51 @@ export function TacticsBody({ team }) {
         <Seg options={TEMPO.map((m, i) => ({ value: i, label: m }))} value={tac.tempo} onChange={(v) => { tac.tempo = v; G.refresh(); }} />
         <T muted size={11} style={{ marginTop: 8 }}>Высокий прессинг и быстрый темп сильнее утомляют игроков. Атакующий настрой создаёт больше моментов, но открывает оборону.</T>
       </Card>
-      <Card title="Запасные" icon="people-outline">
+      <Card title={`Запасные · ${lu.bench.length}/9`} icon="people-outline">
+        {swapIn ? (
+          <View style={{ backgroundColor: C.goldDim, borderRadius: 10, padding: 10, marginBottom: 6, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <T size={13} style={{ flex: 1 }}>Скамейка заполнена. Нажмите на запасного, которого заменит {W.players[swapIn]?.n}.</T>
+            <Pressable onPress={() => setSwapIn(null)}><T color={C.gold} bold size={13}>Отмена</T></Pressable>
+          </View>
+        ) : null}
         {lu.bench.map((id) => (
-          <PlayerRow key={id} p={W.players[id]} onPress={() => onBench(id)} selected={false} />
+          <PlayerRow
+            key={id}
+            p={W.players[id]}
+            selected={!!swapIn}
+            onPress={() => {
+              if (swapIn) {
+                commit(lu.xi, lu.bench.map((x) => (x === id ? swapIn : x)));
+                setSwapIn(null);
+                return;
+              }
+              onBench(id);
+            }}
+            right={!swapIn && sel === null ? (
+              <Pressable hitSlop={8} onPress={() => commit(lu.xi, lu.bench.filter((x) => x !== id))} style={{ padding: 6 }}>
+                <Icon name="arrow-down-circle-outline" size={24} color={C.muted} />
+              </Pressable>
+            ) : undefined}
+          />
         ))}
+        {sel === null && !swapIn ? <T muted size={11} style={{ marginTop: 6 }}>↓ — убрать в резерв. Чтобы выпустить в основу — нажмите на игрока на поле, затем на запасного.</T> : null}
       </Card>
       {others.length ? (
         <Card title="Вне заявки" icon="person-remove-outline">
           {others.map((p) => (
-            <PlayerRow key={p.id} p={p} onPress={() => (p.inj > 0 || p.ban > 0 ? G.push('player', { id: p.id }) : onBench(p.id))} />
+            <PlayerRow
+              key={p.id}
+              p={p}
+              onPress={() => (p.inj > 0 || p.ban > 0 ? G.push('player', { id: p.id }) : onBench(p.id))}
+              right={sel === null && p.inj <= 0 && !(p.ban > 0) ? (
+                <Pressable hitSlop={8} onPress={() => {
+                  if (lu.bench.length < 9) commit(lu.xi, [...lu.bench, p.id]);
+                  else setSwapIn(p.id);
+                }} style={{ padding: 6 }}>
+                  <Icon name="arrow-up-circle-outline" size={24} color={C.accent} />
+                </Pressable>
+              ) : undefined}
+            />
           ))}
         </Card>
       ) : null}
