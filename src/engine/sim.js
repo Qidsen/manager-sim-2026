@@ -4,7 +4,7 @@ import { NATIONS, NATION_BY_CODE } from '../data/nations';
 import { rand, randInt, chance, pick, shuffle, weighted, gauss, getState, seed } from './rng';
 import { recalcOvr, playerValue, wageFor, clamp, POS_WEIGHTS, ATTRS, LINE, money, fmtDate, seasonLabel, POS_FULL, devRole, retrainWeeks, growthOf } from './util';
 import { createMatch, simulateFull, applyResults, winnerSide, quickMatch } from './match';
-import { buildSeason, buildFinals, recordResult, recordFriendly, koContext, sortRows, addFriendly, healComp } from './comps';
+import { buildSeason, buildFinals, recordResult, recordFriendly, koContext, sortRows, addFriendly, healComp, relinkTies, repairKnockouts } from './comps';
 import { INTL_DAYS, SUMMER_DAYS, isWindow, WINDOWS } from './fixtures';
 import { processDebts, processNegs, processClauses } from './market';
 import { maybePress, onUserResult, checkPromise, weeklyEvents } from './stories';
@@ -244,6 +244,7 @@ function playDayMatches(W) {
 // Матч без соперника засчитывается технической победой.
 export function repairSchedule(W, userShift = 0) {
   let moved = 0;
+  try { moved += repairKnockouts(W); } catch (e) { logErr(W, 'repairKO', e); }
   // битые записи расписания
   for (const d in W.sched) {
     const before = W.sched[d].length;

@@ -561,3 +561,63 @@ export function compStageName(comp, stage, gi) {
   if (stage.groups && stage.groups.length > 1) return `Группа ${String.fromCharCode(65 + gi)}`;
   return stage.name;
 }
+
+// ---------- связь противостояний с матчами после загрузки ----------
+// В сохранении (JSON) пары плей-офф и матчи туров становятся разными копиями.
+// Привязываем матчи пар обратно к объектам из туров — результаты пишутся именно туда.
+export function relinkTies(W) {
+  for (const cid in W.comps) {
+    for (const st of W.comps[cid].stages) {
+      if (st.t !== 'ko' || !st.ties) continue;
+      const map = new Map();
+      for (const r of st.rounds) for (const m of r) map.set(`${m.h}|${m.a}`, m);
+      for (const t of st.ties) t.m = t.m.map((x) => map.get(`${x.h}|${x.a}`) || x);
+    }
+  }
+}
+
+// Чиним турниры, которые успели «доиграться» с неверными победителями пар:
+// пересчитываем победителей и пересобираем следующие стадии, если они ещё не сыграны по-настоящему.
+export function repairKnockouts(W) {
+  relinkTies(W);
+  let fixed = 0;
+  for (const cid in W.comps) {
+    const comp = W.comps[cid];
+    if (comp.kind === 'friendly') continue;
+    for (let i = 0; i < comp.stages.length; i++) {
+      const st = comp.stages[i];
+      if (st.t !== 'ko' || !stageDone(st)) continue;
+      const winners = st.ties.map((t) => tieWinner(t));
+      const changed = st.ties.some((t, k) => t.w !== winners[k]);
+      const next = comp.stages[i + 1];
+      const nextTeams = next ? new Set(next.rounds.flat().flatMap((m) => [m.h, m.a])) : null;
+      const broken = next && (next.rounds.flat().some((m) => !m.h || !m.a) || winners.some((w) => w && !nextTeams.has(w)));
+      const nextPlayed = next && next.rounds.flat().some((m) => m.hg !== null && m.h && m.a);
+      const wasDoneWrong = !next && comp.done && comp.winner !== winners[0] && st.ties.length === 1;
+      if (!changed && !broken && !wasDoneWrong) continue;
+      if (next && nextPlayed && !next.rounds.flat().some((m) => !m.h || !m.a)) {
+        // следующая стадия уже реально сыграна — оставляем как есть, только обновляем подписи
+        st.ties.forEach((t, k) => { t.w = winners[k]; });
+        continue;
+      }
+      // убираем испорченные стадии и их записи в календаре
+      const cut = i + 1;
+      for (const d in W.sched) W.sched[d] = W.sched[d].filter((e) => !(e.c === cid && e.s >= cut));
+      comp.stages.length = cut;
+      comp.cur = i;
+      if (comp.done) {
+        const key = comp.hist || comp.id;
+        const h = W.history[key];
+        if (h && h.length && h[h.length - 1].y === W.year) h.pop();
+        comp.done = false;
+        comp.winner = null;
+      }
+      st.finished = false;
+      st.ties.forEach((t) => { t.w = null; });
+      checkStageDone(W, comp, i);
+      fixed++;
+      break;
+    }
+  }
+  return fixed;
+}

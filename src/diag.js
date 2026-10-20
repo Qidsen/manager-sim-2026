@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 import { teamName } from './engine/teams';
 import { fmtDate, seasonLabel } from './engine/util';
 
-export const APP_VERSION = '1.9';
+export const APP_VERSION = '1.9.1';
 const BC = 'diag_breadcrumb_v1';
 let lastUnfinished = null;
 
@@ -66,7 +66,19 @@ export function scanSave(W) {
     const st = W.comps[e.c]?.stages[e.s];
     if (!st || !st.rounds[e.r]) badSched++;
   }
-  return { overdue, stuck, badSched };
+  // плей-офф: пары без победителя, пустые соперники, несвязанные матчи
+  const badKo = [];
+  for (const cid in W.comps) {
+    const c = W.comps[cid];
+    c.stages.forEach((st) => {
+      if (st.t !== 'ko') return;
+      const all = st.rounds.flat();
+      if (all.some((m) => !m.h || !m.a)) badKo.push(`${c.name} / ${st.name}: пустые соперники`);
+      else if (st.finished && st.ties.some((t) => !t.w)) badKo.push(`${c.name} / ${st.name}: не определены победители пар`);
+      else if (st.ties.some((t) => t.m.some((x) => !all.includes(x)))) badKo.push(`${c.name} / ${st.name}: пары не связаны с матчами`);
+    });
+  }
+  return { overdue, stuck, badSched, badKo };
 }
 
 export function buildReport(W) {
@@ -81,6 +93,8 @@ export function buildReport(W) {
   lines.push(`Зависшие турниры: ${r.stuck.length}`);
   for (const s of r.stuck.slice(0, 8)) lines.push(`  · ${s.c}: ${s.why}${s.st ? ` [${s.st}]` : ''}`);
   if (r.badSched) lines.push(`Битых записей расписания: ${r.badSched}`);
+  lines.push(`Ошибки плей-офф: ${r.badKo.length}`);
+  for (const b of r.badKo.slice(0, 6)) lines.push(`  · ${b}`);
   const errs = W.errors || [];
   lines.push(`Ошибок: ${errs.length}`);
   for (const e of errs.slice(-5)) lines.push(`  · ${e.where} (день ${e.d}): ${e.msg} | ${e.stack.split('\n').slice(0, 2).join(' / ')}`);

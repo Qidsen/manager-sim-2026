@@ -19,11 +19,12 @@ export default function DiagScreen() {
         <View style={{ flexDirection: 'row' }}>
           <Stat label="просроченных матчей" value={scan.overdue.length} color={scan.overdue.length ? C.red : C.accent} />
           <Stat label="зависших турниров" value={scan.stuck.length} color={scan.stuck.length ? C.red : C.accent} />
+          <Stat label="ошибок плей-офф" value={scan.badKo.length} color={scan.badKo.length ? C.red : C.accent} />
           <Stat label="ошибок" value={(W.errors || []).length} color={(W.errors || []).length ? C.orange : C.accent} />
         </View>
       </Card>
       <Btn
-        title="Починить календарь"
+        title="Починить календарь и плей-офф"
         icon="construct"
         onPress={() => {
           const moved = repairSchedule(W);
