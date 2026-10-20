@@ -8,6 +8,7 @@ import { useFonts } from 'expo-font';
 import { repairSchedule } from './src/engine/sim';
 import { logError } from './src/diag';
 import DiagScreen from './src/screens/Diag';
+import NegotiateScreen from './src/screens/Negotiate';
 import { saveGame } from './src/storage';
 import { seed } from './src/engine/rng';
 import TitleScreen from './src/screens/Title';
@@ -50,6 +51,7 @@ const STACK = {
   tactics: TacticsScreen,
   database: DatabaseScreen,
   diag: DiagScreen,
+  negotiate: NegotiateScreen,
 };
 
 export default function App() {

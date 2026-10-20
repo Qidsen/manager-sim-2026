@@ -6,6 +6,7 @@ import Page from '../ui/page';
 import { useG } from '../ui/ctx';
 import { POS_FULL, POS_RU, ATTRS, ATTR_RU, money, playerValue, clamp } from '../engine/util';
 import { NATION_BY_CODE } from '../data/nations';
+import { ROLES } from '../engine/market';
 import { makeBid, requestLoan, quickSell, releasePlayer, renewContract, renewDemand, talkToPlayer, wageDemand, askingPrice, promoteYouth, releaseYouth } from '../engine/sim';
 import { playerAvgRating } from '../engine/query';
 
@@ -52,6 +53,7 @@ export default function PlayerScreen({ id }) {
           <Fact label="Стоимость" value={money(playerValue(p))} />
           {club || p.fa ? <Fact label="Зарплата/нед" value={money(p.wage)} /> : null}
           {club ? <Fact label="Контракт" value={`до ${p.contract + 1}`} /> : null}
+          {mine && p.role ? <Fact label="Роль" value={ROLES[p.role]?.short || '—'} /> : null}
         </View>
         {p.inj > 0 || p.ban > 0 ? (
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
@@ -117,7 +119,7 @@ export default function PlayerScreen({ id }) {
         </View>
       ) : mine ? (
         <View style={{ gap: 8 }}>
-          <Btn title="Поговорить с игроком" kind="ghost" onPress={() => G.dialog({
+          <Btn title="Поговорить с игроком" icon="chatbubble-ellipses" kind="ghost" onPress={() => G.dialog({
             title: `Разговор: ${p.n}`,
             text: 'Что сказать игроку?',
             buttons: [
@@ -127,24 +129,15 @@ export default function PlayerScreen({ id }) {
               { title: 'Отмена', kind: 'ghost' },
             ],
           })} />
-          {!p.loan ? (
-            <Btn title="Продлить контракт" kind="ghost" onPress={() => {
-              const d = renewDemand(W, p);
-              G.dialog({
-                title: 'Продление контракта',
-                text: `${p.n} хочет ${money(d)} в неделю (сейчас ${money(p.wage)}). На сколько лет продлить?`,
-                buttons: [1, 2, 3, 4].map((y) => ({ title: `+${y} ${y === 1 ? 'год' : y < 5 ? 'года' : 'лет'}`, kind: 'ghost', onPress: () => show(renewContract(W, p.id, y)) })).concat([{ title: 'Отмена', kind: 'ghost' }]),
-              });
-            }} />
-          ) : null}
-          {!p.loan ? <Btn title={p.listed ? 'Снять с трансфера' : 'Выставить на трансфер'} kind="ghost" onPress={() => { p.listed = !p.listed; G.refresh(); }} /> : null}
+          {!p.loan ? <Btn title="Переговоры о продлении" icon="document-text" kind="ghost" onPress={() => G.push('negotiate', { pid: p.id, kind: 'renew' })} /> : null}
+          {!p.loan ? <Btn title={p.listed ? 'Снять с трансфера' : 'Выставить на трансфер'} icon="pricetag" kind="ghost" onPress={() => { p.listed = !p.listed; G.refresh(); }} /> : null}
           {!p.loan ? <Btn title={`Продать сразу (~${money(playerValue(p) * 0.7)})`} kind="ghost" onPress={() => G.dialog({ title: 'Быстрая продажа', text: 'Игрок уйдёт первому покупателю за ~70% стоимости. Продолжить?', buttons: [{ title: 'Продать', onPress: () => { const r = quickSell(W, p.id); show(r); if (r.status === 'accepted') G.pop(); } }, { title: 'Отмена', kind: 'ghost' }] })} /> : null}
           <Btn title={p.loan ? 'Вернуть из аренды' : 'Расторгнуть контракт'} kind="danger" onPress={() => G.dialog({ title: p.loan ? 'Вернуть игрока?' : 'Расторгнуть контракт?', text: p.loan ? 'Игрок вернётся в свой клуб.' : 'Клуб выплатит половину оставшейся зарплаты.', buttons: [{ title: 'Да', kind: 'danger', onPress: () => { const r = releasePlayer(W, p.id); show(r); if (r.status === 'accepted') G.pop(); } }, { title: 'Отмена', kind: 'ghost' }] })} />
         </View>
       ) : my && !p.aca ? (
         <View style={{ gap: 8 }}>
-          {bidOpen ? <BidForm W={W} p={p} my={my} onDone={(r) => { setBidOpen(false); show(r); }} /> : <Btn title={p.fa ? 'Предложить контракт' : 'Сделать предложение'} onPress={() => setBidOpen(true)} />}
-          {club && !p.loan ? <Btn title="Попросить в аренду" kind="ghost" onPress={() => show(requestLoan(W, p.id))} /> : null}
+          <Btn title={p.fa ? 'Переговоры о контракте' : 'Начать переговоры'} icon="chatbubbles" onPress={() => G.push('negotiate', { pid: p.id, kind: 'buy' })} />
+          {club && !p.loan ? <Btn title="Попросить в аренду" icon="repeat" kind="ghost" onPress={() => G.push('negotiate', { pid: p.id, kind: 'loan' })} /> : null}
         </View>
       ) : null}
     </Page>

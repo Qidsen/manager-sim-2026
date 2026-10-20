@@ -16,7 +16,7 @@ export default function CareerScreen() {
   const unemployed = !u.club && !u.nation;
   return (
     <Page title="Карьера" sub={u.name} back>
-      <Card title="Тренер">
+      <Card title="Тренер" icon="person-outline">
         <T muted size={12}>Репутация</T>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 }}>
           <Bar value={u.rep} height={8} style={{ flex: 1 }} color={C.gold} />
@@ -26,7 +26,7 @@ export default function CareerScreen() {
         <T size={14} style={{ marginTop: 4 }}>Сборная: <T bold size={14}>{u.nation ? NATION_BY_CODE[u.nation].name : '—'}</T></T>
       </Card>
 
-      <Card title="Предложения работы">
+      <Card title="Предложения работы" icon="briefcase-outline">
         {W.jobOffers.length ? (
           W.jobOffers.map((o, i) => {
             const name = o.type === 'club' ? W.clubs[o.id].name : `Сборная: ${NATION_BY_CODE[o.id].name}`;
@@ -49,10 +49,10 @@ export default function CareerScreen() {
         {unemployed ? <Btn small kind="ghost" title="Разослать резюме" style={{ marginTop: 10 }} onPress={() => { jobOffers(W, true); G.refresh(); }} /> : null}
       </Card>
 
-      <Card title="Трофеи">
+      <Card title="Трофеи" icon="trophy-outline">
         {u.trophies.length ? u.trophies.map((t, i) => <T key={i} size={14} style={{ paddingVertical: 3 }}>🏆 {t.name} — {t.team} ({seasonLabel(t.y)})</T>) : <T muted size={13}>Трофеев пока нет.</T>}
       </Card>
-      <Card title="История">
+      <Card title="История" icon="time-outline">
         {u.career.length ? u.career.map((c, i) => <T key={i} size={13} style={{ paddingVertical: 3 }}>{seasonLabel(c.y)} · {c.team} — {c.end}</T>) : <T muted size={13}>Карьера только начинается.</T>}
         {W.seasonLog.map((s, i) => s.user ? <T key={`s${i}`} size={13} muted style={{ paddingVertical: 3 }}>{seasonLabel(s.y)}: {s.user.league}, {s.user.pos}-е место (цель {s.user.target})</T> : null)}
       </Card>

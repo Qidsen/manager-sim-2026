@@ -33,7 +33,7 @@ export default function TeamScreen({ id }) {
         {c ? <T muted size={12} center style={{ marginTop: 10 }}>Бюджет: {money(c.balance)}</T> : null}
       </Card>
       {next.length || last.length ? (
-        <Card title="Матчи">
+        <Card title="Матчи" icon="calendar-outline">
           {last.map(({ m }, i) => (
             <T key={`l${i}`} size={13} style={{ paddingVertical: 3 }}>{fmtShort(W.year, m.day)} · {teamName(W, m.h)} {scoreText(m)} {teamName(W, m.a)}</T>
           ))}
@@ -42,7 +42,7 @@ export default function TeamScreen({ id }) {
           ))}
         </Card>
       ) : null}
-      <Card title={nat ? 'Вызванные игроки' : 'Состав'}>
+      <Card title={nat ? 'Вызванные игроки' : 'Состав'} icon="people-outline">
         {list.map((p) => (
           <PlayerRow key={p.id} p={p} onPress={() => G.push('player', { id: p.id })} sub={nat && p.club ? W.clubs[p.club]?.short : null} />
         ))}

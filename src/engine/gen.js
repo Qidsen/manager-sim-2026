@@ -159,6 +159,17 @@ export function createWorld(seedValue = Date.now() % 1e9, year = 2026, squads = 
     c.stadium.price = Math.round((10 + c.rep * 0.5) * (0.5 + 0.5 * demand));
     genClubSquad(W, c, L, squads);
   }
+  // стартовый рынок свободных агентов: в основном ветераны и игроки среднего уровня
+  for (let i = 0; i < 140; i++) {
+    const nat = weighted(NATIONS, (n) => n.str ** 2).code;
+    const age = Math.round(clamp(gauss(30, 3.5), 21, 36));
+    const ovr = Math.round(clamp(gauss(62, 5) - Math.max(0, age - 32) * 1.5, 45, age >= 30 ? 76 : 72));
+    const pos = pick(['GK', 'CB', 'CB', 'LB', 'RB', 'DM', 'CM', 'CM', 'AM', 'LW', 'RW', 'ST', 'ST']);
+    const p = makePlayer(W, { pos, ovr, age, nat, club: null, wageRep: 60 });
+    p.fa = true;
+    p.faDays = randInt(0, 60);
+    p.wage = Math.round(p.wage * 0.9);
+  }
   // сборные
   for (const n of NATIONS) {
     W.nations[n.code] = { code: n.code, rep: n.str, squad: [], tactic: defaultTactic('4-3-3'), elo: 1000 + n.str * 10 };

@@ -32,6 +32,7 @@ export function shuffle(arr) {
   return a;
 }
 export function weighted(items, weightFn) {
+  if (!items || !items.length) return null;
   let total = 0;
   const ws = items.map((it) => {
     const w = Math.max(0, weightFn(it));

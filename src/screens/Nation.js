@@ -35,18 +35,18 @@ export default function NationScreen() {
         <Btn small title="Вызов игроков" style={{ flex: 1 }} onPress={() => G.push('callup')} />
         <Btn small kind="ghost" title="Тактика" style={{ flex: 1 }} onPress={() => G.push('tactics', { team })} />
       </View>
-      <Card title="Автовызов">
+      <Card title="Автовызов" icon="sync-outline">
         <Seg options={[{ value: false, label: 'Я сам' }, { value: true, label: 'Автоматически' }]} value={!!u.autoCall} onChange={(v) => { u.autoCall = v; if (v) callUp(W, u.nation); G.refresh(); }} />
         <T muted size={12} style={{ marginTop: 6 }}>При автовызове состав обновляется перед каждым окном сборных.</T>
       </Card>
       {comps.length ? (
-        <Card title="Турниры">
+        <Card title="Турниры" icon="trophy-outline">
           {comps.map((c) => (
             <Btn key={c.id} small kind="ghost" title={c.name} style={{ marginBottom: 6 }} onPress={() => G.push('comp', { id: c.id })} />
           ))}
         </Card>
       ) : null}
-      <Card title="Матчи">
+      <Card title="Матчи" icon="calendar-outline">
         {last.map(({ m }, i) => <T key={`l${i}`} size={13} style={{ paddingVertical: 3 }}>{fmtShort(W.year, m.day)} · {teamName(W, m.h)} {scoreText(m)} {teamName(W, m.a)}</T>)}
         {next.map(({ m, comp }, i) => <T key={`n${i}`} size={13} muted style={{ paddingVertical: 3 }}>{fmtShort(W.year, m.day)} · {teamName(W, m.h)} — {teamName(W, m.a)} · {comp.kind === 'friendly' ? 'товарищеский' : comp.name}</T>)}
         {!last.length && !next.length ? <T muted>Матчей нет</T> : null}

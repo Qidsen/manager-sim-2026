@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { View } from 'react-native';
-import { C, T, Card, Btn, Seg, Bar, Stat, Empty } from '../ui/kit';
+import { View, Text, StyleSheet } from 'react-native';
+import { C, F, T, Card, Btn, Seg, Bar, Stat, Empty, Icon } from '../ui/kit';
 import Page from '../ui/page';
 import { useG } from '../ui/ctx';
 import PlayerRow from '../ui/playerRow';
 import { money, clamp } from '../engine/util';
 import { upgradeStadium, upgradeFacility, facilityCost, fairPrice } from '../engine/sim';
 
-const FIN_IN = [['tickets', 'Билеты'], ['tv', 'Телеправа'], ['sponsor', 'Спонсоры'], ['prize', 'Призовые'], ['sales', 'Продажи игроков']];
-const FIN_OUT = [['wages', 'Зарплаты'], ['staff', 'Персонал'], ['buys', 'Покупки игроков'], ['build', 'Строительство']];
+const FIN_IN = [['tickets', 'Билеты', 'ticket'], ['tv', 'Телеправа', 'tv'], ['sponsor', 'Спонсоры', 'ribbon'], ['prize', 'Призовые', 'trophy'], ['sales', 'Продажи игроков', 'person-remove']];
+const FIN_OUT = [['wages', 'Зарплаты', 'people'], ['staff', 'Персонал', 'medkit'], ['buys', 'Покупки игроков', 'person-add'], ['build', 'Строительство', 'construct']];
 
 export default function ClubScreen({ tab: initial }) {
   const G = useG();
@@ -24,35 +24,39 @@ export default function ClubScreen({ tab: initial }) {
       <Seg options={[{ value: 'fin', label: 'Финансы' }, { value: 'stadium', label: 'Стадион' }, { value: 'train', label: 'База' }, { value: 'academy', label: 'Академия' }]} value={tab} onChange={setTab} style={{ marginBottom: 12 }} />
 
       {tab === 'fin' ? (
-        <>
-          <Card title="Доходы в этом сезоне">
-            {FIN_IN.map(([k, l]) => (
-              <View key={k} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 }}>
-                <T size={14}>{l}</T><T size={14} color={C.accent}>{money(c.fin[k])}</T>
+        (() => {
+          const inc = FIN_IN.reduce((s2, [k]) => s2 + c.fin[k], 0);
+          const out = FIN_OUT.reduce((s2, [k]) => s2 + c.fin[k], 0);
+          const wages = c.squad.reduce((s2, x) => s2 + W.players[x].wage, 0);
+          const maxV = Math.max(1, ...FIN_IN.map(([k]) => c.fin[k]), ...FIN_OUT.map(([k]) => c.fin[k]));
+          const rowF = ([k, l, icon], col) => (
+            <View key={k} style={{ marginBottom: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <Icon name={icon} size={14} color={C.muted} />
+                <T size={13} style={{ flex: 1 }}>{l}</T>
+                <Text style={{ color: col, fontFamily: F.d7, fontSize: 15 }}>{money(c.fin[k])}</Text>
               </View>
-            ))}
-          </Card>
-          <Card title="Расходы в этом сезоне">
-            {FIN_OUT.map(([k, l]) => (
-              <View key={k} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 }}>
-                <T size={14}>{l}</T><T size={14} color={C.red}>{money(c.fin[k])}</T>
+              <Bar value={c.fin[k]} max={maxV} color={col} height={5} />
+            </View>
+          );
+          return (
+            <>
+              <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+                <View style={[cs.big, { borderColor: (inc - out >= 0 ? C.accent : C.red) + '55' }]}>
+                  <T muted size={11}>Итог сезона</T>
+                  <Text style={[cs.bigVal, { color: inc - out >= 0 ? C.accent : C.red }]}>{money(inc - out)}</Text>
+                </View>
+                <View style={cs.big}>
+                  <T muted size={11}>Зарплаты в неделю</T>
+                  <Text style={cs.bigVal}>{money(wages)}</Text>
+                </View>
               </View>
-            ))}
-          </Card>
-          <Card title="Итог">
-            {(() => {
-              const inc = FIN_IN.reduce((s, [k]) => s + c.fin[k], 0);
-              const out = FIN_OUT.reduce((s, [k]) => s + c.fin[k], 0);
-              const wages = c.squad.reduce((s, x) => s + W.players[x].wage, 0);
-              return (
-                <>
-                  <T bold size={18} color={inc - out >= 0 ? C.accent : C.red}>{money(inc - out)}</T>
-                  <T muted size={13} style={{ marginTop: 6 }}>Зарплатная ведомость: {money(wages)} в неделю ({money(wages * 52)} в год)</T>
-                </>
-              );
-            })()}
-          </Card>
-        </>
+              <Card title="Доходы" icon="trending-up">{FIN_IN.map((r) => rowF(r, C.accent))}</Card>
+              <Card title="Расходы" icon="trending-down">{FIN_OUT.map((r) => rowF(r, C.red))}</Card>
+              <T muted size={12} center>Годовой фонд зарплат: {money(wages * 52)}</T>
+            </>
+          );
+        })()
       ) : null}
 
       {tab === 'stadium' ? (
@@ -64,7 +68,7 @@ export default function ClubScreen({ tab: initial }) {
             </View>
             {c.lastAtt ? <Bar value={c.lastAtt} max={c.stadium.cap} style={{ marginTop: 10 }} /> : null}
           </Card>
-          <Card title="Цена билета">
+          <Card title="Цена билета" icon="ticket-outline">
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <Btn small kind="ghost" title="−5" onPress={() => { c.stadium.price = clamp(c.stadium.price - 5, 5, 300); G.refresh(); }} />
               <T bold size={22}>€{c.stadium.price}</T>
@@ -72,7 +76,7 @@ export default function ClubScreen({ tab: initial }) {
             </View>
             <T muted size={12} style={{ marginTop: 8 }}>Болельщики считают справедливой цену около €{fair}. Дороже — меньше зрителей.</T>
           </Card>
-          <Card title="Расширение">
+          <Card title="Расширение" icon="construct-outline">
             {c.stadium.up ? (
               <T>Идёт строительство: +{c.stadium.up.add} мест.</T>
             ) : (
@@ -87,11 +91,11 @@ export default function ClubScreen({ tab: initial }) {
 
       {tab === 'train' ? (
         <>
-          <Card title="Интенсивность тренировок">
+          <Card title="Интенсивность тренировок" icon="barbell-outline">
             <Seg options={[{ value: 0, label: 'Лёгкая' }, { value: 1, label: 'Обычная' }, { value: 2, label: 'Высокая' }]} value={c.training.int} onChange={(v) => { c.training.int = v; G.refresh(); }} />
             <T muted size={12} style={{ marginTop: 8 }}>Высокая интенсивность ускоряет развитие игроков, но они дольше восстанавливаются и чаще травмируются.</T>
           </Card>
-          <Card title="Персонал и инфраструктура">
+          <Card title="Персонал и инфраструктура" icon="business-outline">
             {[['coach', 'Тренерский штаб', 'Развитие игроков'], ['med', 'Медицинский центр', 'Восстановление и травмы'], ['scout', 'Скаутский отдел', 'Точность оценки потенциала'], ['youth', 'Академия', 'Качество воспитанников']].map(([k, l, d]) => {
               const lvl = k === 'youth' ? c.youthLvl : c.staff[k];
               return (
@@ -113,7 +117,7 @@ export default function ClubScreen({ tab: initial }) {
 
       {tab === 'academy' ? (
         c.academy.length ? (
-          <Card title="Воспитанники">
+          <Card title="Воспитанники" icon="school-outline">
             {c.academy.map((id) => W.players[id]).filter(Boolean).map((p) => (
               <PlayerRow key={p.id} p={p} onPress={() => G.push('player', { id: p.id })} />
             ))}
@@ -126,3 +130,8 @@ export default function ClubScreen({ tab: initial }) {
     </Page>
   );
 }
+
+const cs = StyleSheet.create({
+  big: { flex: 1, backgroundColor: C.card, borderRadius: 16, padding: 12, borderWidth: 1, borderColor: C.line },
+  bigVal: { color: C.text, fontFamily: F.d8, fontSize: 24, marginTop: 2 },
+});

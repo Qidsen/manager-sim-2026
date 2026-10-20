@@ -30,14 +30,14 @@ export default function DatabaseScreen() {
 
   return (
     <Page title="База игроков" back>
-      <Card title="Встроенная база">
+      <Card title="Встроенная база" icon="server-outline">
         <T size={14} style={{ marginBottom: 10 }}>Реальные составы топ-клубов (октябрь 2026). Остальные команды генерируются.</T>
         <View style={{ flexDirection: 'row' }}>
           <Stat label="клубов" value={builtIn.clubs} />
           <Stat label="игроков" value={builtIn.players} />
         </View>
       </Card>
-      <Card title="Своя база">
+      <Card title="Своя база" icon="cloud-upload-outline">
         {custom ? (
           <>
             <View style={{ flexDirection: 'row', marginBottom: 12 }}>
@@ -54,7 +54,7 @@ export default function DatabaseScreen() {
           </>
         )}
       </Card>
-      <Card title="Формат файла">
+      <Card title="Формат файла" icon="code-slash-outline">
         <T size={13} style={{ lineHeight: 19 }}>
           {'{\n  "Arsenal": [\n    ["David Raya", "GK", 31, 87, null, "ESP"],\n    ["Bukayo Saka", "RW", 25, 90, 91, "ENG"]\n  ]\n}'}
         </T>

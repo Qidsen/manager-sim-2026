@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, FlatList, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, Pressable, FlatList, ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { C, F, T, Card, Btn, Seg, Bar, Icon, IconBtn, Rating, ratingColor, tap, thud } from '../ui/kit';
 import { useG } from '../ui/ctx';
 import { userMatchToday, prepareMatch, finalizeMatch } from '../engine/sim';
-import { stepMinute, simulateFull, doSub, resolveLineup } from '../engine/match';
+import { stepMinute, simulateFull, doSub, resolveLineup, clockLabel } from '../engine/match';
+import MatchPitch from '../ui/MatchPitch';
 import { teamName, teamFlag, teamColor, teamPool, teamTactic, isUserTeam } from '../engine/teams';
 import { FORMATIONS, MENTALITY, POS_RU, slotRating, fmtDate } from '../engine/util';
 import { PosBadge } from '../ui/playerRow';
@@ -24,6 +25,10 @@ const EV = {
   ft: { icon: 'flag', color: C.gold },
   pens: { icon: 'locate', color: C.gold },
   info: { icon: 'ellipse', color: C.dim },
+  corner: { icon: 'flag-outline', color: C.muted },
+  fk: { icon: 'locate-outline', color: C.orange },
+  pen: { icon: 'alert-circle', color: C.gold },
+  var: { icon: 'tv', color: C.orange },
 };
 
 export default function MatchScreen() {
@@ -37,6 +42,8 @@ export default function MatchScreen() {
   const [speed, setSpeed] = useState(2);
   const [subOut, setSubOut] = useState(null);
   const [panel, setPanel] = useState(null); // 'subs' | 'tactic'
+  const [showPitch, setShowPitch] = useState(true);
+  const { width: winW } = useWindowDimensions();
   const finalized = useRef(false);
 
   const me = um ? (isUserTeam(W, um.m.h) ? 0 : 1) : 0;
@@ -50,7 +57,10 @@ export default function MatchScreen() {
       stepMinute(W, s);
       const newEv = s.ev.slice(before);
       if (newEv.some((e) => e.type === 'goal')) thud();
-      if (s.min === 45 && s.phase === 'play') setRunning(false);
+      if (s.htPause) {
+        s.htPause = false;
+        setRunning(false);
+      }
       if (newEv.some((e) => e.side === me && (e.type === 'inj' || e.type === 'red')) && W.user.autoSubs === false) setRunning(false);
       if (s.done) {
         setRunning(false);
@@ -173,8 +183,8 @@ export default function MatchScreen() {
   const side = me === 0 ? s.h : s.a;
   const totalPoss = s.poss[0] + s.poss[1] || 1;
   const pct0 = Math.round((s.poss[0] / totalPoss) * 100);
-  const scorers = (si) => s.goals.filter((g) => g[1] === si).map((g) => `${(W.players[g[2]]?.n || '').split(' ').slice(-1)[0]} ${g[0]}'`);
-  const minute = s.done ? 'FT' : `${Math.min(s.min, s.phase === 'et' ? 120 : 90)}'`;
+  const scorers = (si) => s.goals.filter((g) => g[1] === si).map((g) => `${(W.players[g[2]]?.n || '').split(' ').slice(-1)[0]}${g[4] === 'pen' ? ' (п)' : g[4] === 'og' ? ' (авт)' : ''} ${g[0]}'`);
+  const minute = s.done ? 'FT' : s.min === 0 ? "0'" : `${clockLabel(s)}'`;
 
   const header = (
     <LinearGradient colors={['#141E33', C.bg]} style={{ borderBottomWidth: 1, borderBottomColor: C.line }}>
@@ -215,6 +225,13 @@ export default function MatchScreen() {
         <View style={st.statRow}>
           <StatLine label="Владение" a={`${pct0}%`} b={`${100 - pct0}%`} va={pct0} vb={100 - pct0} me={me} />
           <StatLine label="Удары (в створ)" a={`${s.shots[0]} (${s.sot[0]})`} b={`${s.shots[1]} (${s.sot[1]})`} va={s.shots[0]} vb={s.shots[1]} me={me} />
+          {phase === 'post' ? (
+            <>
+              <StatLine label="Угловые" a={`${s.corners[0]}`} b={`${s.corners[1]}`} va={s.corners[0]} vb={s.corners[1]} me={me} />
+              <StatLine label="Фолы" a={`${(s.fouls || [0, 0])[0]}`} b={`${(s.fouls || [0, 0])[1]}`} va={(s.fouls || [0, 0])[0]} vb={(s.fouls || [0, 0])[1]} me={me} />
+              <StatLine label="Офсайды" a={`${(s.offs || [0, 0])[0]}`} b={`${(s.offs || [0, 0])[1]}`} va={(s.offs || [0, 0])[0]} vb={(s.offs || [0, 0])[1]} me={me} />
+            </>
+          ) : null}
         </View>
       </View>
       <Bar value={s.min} max={s.phase === 'et' || s.min > 90 ? 120 : 90} color={C.gold} height={3} style={{ borderRadius: 0 }} />
@@ -277,6 +294,11 @@ export default function MatchScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
       {header}
+      {showPitch && !panel ? (
+        <View style={{ paddingTop: 10, paddingHorizontal: 14 }}>
+          <MatchPitch S={s} me={me} tickMs={SPEEDS[speed]} width={Math.min(winW - 28, 520)} />
+        </View>
+      ) : null}
       {panel === 'tactic' ? (
         <View style={st.sheet}>
           <Text style={st.sheetTitle}>НАСТРОЙ · {MENTALITY[side.tac.ment].toUpperCase()}</Text>
@@ -332,7 +354,7 @@ export default function MatchScreen() {
           return (
             <View style={[st.ev, isGoal && { backgroundColor: item.side === me ? C.accentDim : C.redDim }]}>
               <View style={[st.evSide, { backgroundColor: sideCol }]} />
-              <Text style={st.evMin}>{item.min}'</Text>
+              <Text style={st.evMin}>{item.mt || item.min}'</Text>
               <View style={[st.evIcon, { backgroundColor: ev.color + '22' }]}>
                 <Icon name={ev.icon} size={13} color={ev.color} />
               </View>
@@ -346,6 +368,7 @@ export default function MatchScreen() {
           <Icon name={running ? 'pause' : 'play'} size={26} color="#1A1206" />
         </Pressable>
         <CtrlBtn icon="speedometer" label={`x${speed}`} onPress={() => setSpeed(speed === 1 ? 2 : speed === 2 ? 4 : 1)} />
+        <CtrlBtn icon={showPitch ? 'list' : 'football-outline'} label={showPitch ? 'Лента' : 'Поле'} active={false} onPress={() => setShowPitch(!showPitch)} />
         <CtrlBtn icon="swap-vertical" label={`Замены ${side.subsLeft}`} active={panel === 'subs'} onPress={() => { setRunning(false); setPanel(panel === 'subs' ? null : 'subs'); setSubOut(null); }} />
         <CtrlBtn icon="options" label="Тактика" active={panel === 'tactic'} onPress={() => { setRunning(false); setPanel(panel === 'tactic' ? null : 'tactic'); }} />
         <CtrlBtn icon="play-skip-forward" label="До конца" onPress={() => { setRunning(false); simulateFull(W, s); finish(); setN((n) => n + 1); }} />
@@ -426,12 +449,12 @@ const st = StyleSheet.create({
   subPos: { color: C.muted, fontFamily: F.d7, fontSize: 13, width: 26 },
   ev: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, paddingVertical: 9, paddingRight: 8, borderRadius: 10, marginBottom: 2 },
   evSide: { width: 3, alignSelf: 'stretch', borderRadius: 2 },
-  evMin: { color: C.muted, fontFamily: F.d7, fontSize: 15, width: 30, textAlign: 'right', marginTop: 1 },
+  evMin: { color: C.muted, fontFamily: F.d7, fontSize: 14, width: 38, textAlign: 'right', marginTop: 1 },
   evIcon: { width: 24, height: 24, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
   controls: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 12, backgroundColor: 'rgba(10,15,28,0.97)', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.line },
   play: { width: 56, height: 56, borderRadius: 28, backgroundColor: C.gold, alignItems: 'center', justifyContent: 'center' },
   ctrl: { flex: 1, alignItems: 'center', gap: 2, paddingVertical: 7, borderRadius: 12, backgroundColor: C.card2, borderWidth: 1, borderColor: C.line },
-  ctrlText: { color: C.text, fontSize: 10.5, fontWeight: '700' },
+  ctrlText: { color: C.text, fontSize: 10, fontWeight: '700' },
   resultBanner: { borderRadius: 14, borderWidth: 1, paddingVertical: 8, alignItems: 'center', marginBottom: 12 },
   resultText: { fontFamily: F.d8, fontSize: 24, letterSpacing: 3 },
   motm: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 18, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: C.gold + '55' },

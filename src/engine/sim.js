@@ -6,6 +6,7 @@ import { recalcOvr, playerValue, wageFor, clamp, POS_WEIGHTS, ATTRS, LINE, money
 import { createMatch, simulateFull, applyResults, winnerSide, quickMatch } from './match';
 import { buildSeason, buildFinals, recordResult, recordFriendly, koContext, sortRows, addFriendly, healComp } from './comps';
 import { INTL_DAYS, SUMMER_DAYS, isWindow, WINDOWS } from './fixtures';
+import { processDebts } from './market';
 import { teamName, teamPool, teamTactic, isNat, natCode, isUserTeam, callUp, invalidateNatIndex, teamRep } from './teams';
 import { levelOfRep, youthPlayer, newStats, newFin, fillNations, makePlayer, randomName } from './gen';
 
@@ -390,6 +391,7 @@ function dailyTick(W) {
     aiTransfers(W, day < 100 ? 4 : 2);
     userIncomingOffers(W);
   }
+  if (day % 2 === 0) aiSignFreeAgents(W, isWindow(day) ? 3 : 1);
   if (day === WINDOWS[0][1] || day === WINDOWS[1][1]) mail(W, 'Трансферное окно закрылось', 'Покупки и продажи снова станут доступны в следующее окно. Свободных агентов можно подписывать в любое время.');
   if (day === WINDOWS[1][0]) mail(W, 'Зимнее трансферное окно открыто', 'Окно открыто до конца января.');
   if (day === 280) youthIntake(W);
@@ -407,7 +409,34 @@ function dailyTick(W) {
   W.offers = W.offers.filter((o) => o.until >= W.year * 365 + day);
 }
 
+const ROLE_APPS = { key: 0.75, first: 0.55, rotation: 0.3, backup: 0.1, prospect: 0.15 };
+const ROLE_RU = { key: 'ключевого игрока', first: 'игрока основы', rotation: 'игрока ротации', backup: 'запасного', prospect: 'молодого игрока' };
+
+function roleCheck(W) {
+  const u = W.user;
+  if (!u?.club) return;
+  const c = W.clubs[u.club];
+  const ps = c.squad.map((id) => W.players[id]).filter(Boolean);
+  const games = Math.max(0, ...ps.map((p) => p.st.app));
+  if (games < 6) return;
+  for (const p of ps) {
+    if (!p.role || p.inj > 0 || p.loan) continue;
+    const need = ROLE_APPS[p.role] || 0;
+    const ratio = p.st.app / games;
+    if (need >= 0.5 && ratio < need * 0.6) {
+      p.mor = clamp(p.mor - 6, 5, 100);
+      if (p.unhappy !== W.year && p.mor < 50) {
+        p.unhappy = W.year;
+        mail(W, `${p.n} недоволен игровым временем`, `${p.n} подписывал контракт на роль ${ROLE_RU[p.role]}, но сыграл только ${p.st.app} из ${games} матчей. Поговорите с ним или дайте больше игрового времени.`);
+      }
+    } else if (ratio >= need) p.mor = clamp(p.mor + 2, 5, 100);
+  }
+}
+
 function weekly(W) {
+  processDebts(W);
+  for (const p of playerList(W)) if (p.fa) p.faDays = (p.faDays || 0) + 7;
+  if (Math.floor(W.day / 7) % 4 === 2) roleCheck(W);
   // тренировки и развитие — раз в 4 недели (с учётом всех четырёх недель)
   const monthly = Math.floor(W.day / 7) % 4 === 0;
   if (monthly) for (const p of playerList(W)) {
@@ -441,7 +470,10 @@ function weekly(W) {
   for (const cid in W.clubs) {
     const c = W.clubs[cid];
     let wages = 0;
-    for (const pid of c.squad) wages += W.players[pid]?.wage || 0;
+    for (const pid of c.squad) {
+      const pl = W.players[pid];
+      if (pl) wages += pl.loan?.share !== undefined ? pl.wage * pl.loan.share : pl.wage;
+    }
     wages += c.academy.length * 500;
     const staff = (c.staff.coach + c.staff.med + c.staff.scout + c.youthLvl) * 9000 * (0.5 + c.rep / 100);
     const L = c.league ? LEAGUE_BY_ID[c.league] : null;
@@ -564,13 +596,37 @@ function aiTransfers(W, attempts) {
   }
 }
 
+// ИИ-клубы подписывают сильных свободных агентов: лучшие уходят за пару недель
+function aiSignFreeAgents(W, perDay) {
+  const fas = playerList(W).filter((p) => p.fa && p.ovr >= 62 && p.age <= 34).sort((a, b) => b.ovr - a.ovr).slice(0, 25);
+  const clubs = Object.values(W.clubs).filter((c) => c.id !== W.user?.club && c.squad.length < 30);
+  let n = 0;
+  for (const p of fas) {
+    if (n >= perDay) break;
+    if (!chance(0.18 + (p.ovr - 62) * 0.01)) continue;
+    const fits = clubs.filter((c) => {
+      const L = levelOfRep(c.rep);
+      return p.ovr >= L - 3 && p.ovr <= L + 6 && c.balance > p.wage * 60;
+    });
+    if (!fits.length) continue;
+    const c = weighted(fits, (x) => (x.rep / 50) ** 3);
+    p.wage = wageFor(p.ovr, p.age, c.rep);
+    p.contract = W.year + (p.age >= 31 ? randInt(0, 1) : randInt(1, 3));
+    movePlayer(W, p, c.id, 0);
+    p.faDays = 0;
+    n++;
+    if (p.ovr >= 76 || c.rep >= 78) news(W, `${p.n} (${p.ovr}) подписывает контракт с «${c.name}» на правах свободного агента`);
+  }
+}
+
 function releaseWorst(W, c) {
-  const sorted = c.squad.map((x) => W.players[x]).sort((a, b) => a.ovr - b.ovr + (b.age - a.age) * 0.3);
+  const sorted = c.squad.map((x) => W.players[x]).filter((x) => !x.loan).sort((a, b) => a.ovr - b.ovr + (b.age - a.age) * 0.3);
   const p = sorted[0];
   if (!p) return;
   c.squad = c.squad.filter((x) => x !== p.id);
   p.club = null;
   p.fa = true;
+  p.faDays = 0;
   p.listed = false;
 }
 
@@ -592,7 +648,7 @@ function userIncomingOffers(W) {
     const b = pick(buyers);
     const fee = Math.round(val * (p.listed ? 0.75 + rand() * 0.4 : 1.15 + rand() * 0.45) / 1e5) * 1e5;
     const id = `o${W.year}${W.day}${pid}`;
-    W.offers.push({ id, pid, from: b.id, fee, until: W.year * 365 + W.day + 6 });
+    W.offers.push({ id, pid, from: b.id, fee, until: W.year * 365 + W.day + 6, max: fee * (1.08 + rand() * 0.32), pat: randInt(2, 3) });
     mail(W, `Предложение за ${p.n}`, `«${b.name}» предлагает ${money(fee)} за ${p.n} (${p.ovr}, ${p.age} лет). Оценочная стоимость: ${money(val)}.\nОтветьте в разделе «Трансферы → Предложения» в течение недели.`, { stop: true, kind: 'offer', ref: id });
   }
 }
@@ -971,7 +1027,7 @@ function rollover(W) {
         p.club = null;
         p.fa = true;
         mail(W, `${p.n} покинул клуб`, `Контракт ${p.n} истёк, игрок стал свободным агентом.`);
-      } else if (chance(p.ovr >= levelOfRep(c.rep) - 6 ? 0.8 : 0.4)) {
+      } else if (chance(p.ovr >= levelOfRep(c.rep) + 1 ? 0.995 : p.ovr >= levelOfRep(c.rep) - 4 ? 0.95 : p.ovr >= levelOfRep(c.rep) - 8 ? 0.75 : 0.4)) {
         p.contract = W.year + randInt(1, 3);
         p.wage = wageFor(p.ovr, p.age, c.rep);
       } else {

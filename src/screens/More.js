@@ -46,7 +46,7 @@ export default function MoreScreen() {
         <Item icon="save" color={C.muted} title="Сохранить" sub="Игра сохраняется сама, но можно и вручную" onPress={async () => { await saveGame(W); G.alert('Сохранено', 'Прогресс записан.'); }} />
         <Item icon="exit" color={C.red} title="В главное меню" sub="С сохранением" onPress={() => G.toMenu()} />
       </Card>
-      <Text style={s.ver}>MANAGER SIM 2026 · ВЕРСИЯ 1.2</Text>
+      <Text style={s.ver}>MANAGER SIM 2026 · ВЕРСИЯ 1.3</Text>
     </Page>
   );
 }

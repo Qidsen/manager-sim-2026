@@ -65,7 +65,8 @@ export function topScorers(W, comp, n = 20) {
   const a = {};
   for (const st of comp.stages) for (const r of st.rounds) for (const m of r) {
     if (!m.gl) continue;
-    for (const [, , pid, as] of m.gl) {
+    for (const [, , pid, as, how] of m.gl) {
+      if (how === 'og') continue;
       g[pid] = (g[pid] || 0) + 1;
       if (as) a[as] = (a[as] || 0) + 1;
     }
