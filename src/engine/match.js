@@ -280,7 +280,7 @@ function pickLine(W, side, lines) {
 
 function setBall(S, att, x, y, kind, pid) {
   // x: 0 — ворота хозяев, 1 — ворота гостей
-  S.ball = { x: clamp(x, 0, 1), y: clamp(y, 0, 1), kind, side: att, pid, t: (S.ballT = (S.ballT || 0) + 1) };
+  S.ball = { x: clamp(x, 0, 1), y: clamp(y, 0, 1), kind, side: att, pid, how: S.curHow || null, t: (S.ballT = (S.ballT || 0) + 1) };
 }
 const toward = (att, v) => (att === 0 ? v : 1 - v);
 
@@ -302,6 +302,15 @@ export function penConvert(sho, gkv) {
 }
 
 function shotOutcome(W, S, att, shooter, quality, how) {
+  S.curHow = how;
+  try {
+    shotOutcomeInner(W, S, att, shooter, quality, how);
+  } finally {
+    S.curHow = null;
+  }
+}
+
+function shotOutcomeInner(W, S, att, shooter, quality, how) {
   // quality: множитель вероятности гола (пенальти > удар с игры > удар головой > штрафной)
   const side = sideOf(S, att);
   const opp = sideOf(S, 1 - att);

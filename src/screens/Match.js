@@ -6,13 +6,15 @@ import { useG } from '../ui/ctx';
 import { userMatchToday, prepareMatch, finalizeMatch } from '../engine/sim';
 import { stepMinute, simulateFull, doSub, resolveLineup, clockLabel } from '../engine/match';
 import MatchPitch from '../ui/MatchPitch';
+import { buildSequence } from '../engine/playbyplay';
 import { teamName, teamFlag, teamColor, teamPool, teamTactic, isUserTeam } from '../engine/teams';
 import { FORMATIONS, MENTALITY, POS_RU, slotRating, fmtDate } from '../engine/util';
 import { PosBadge } from '../ui/playerRow';
 import { lastResults, resultLetter } from '../engine/query';
 import { bcStart, bcEnd, logError } from '../diag';
 
-const SPEEDS = { 1: 420, 2: 180, 4: 60 };
+// длительность одной игровой минуты на экране, мс
+const SPEEDS = { 1: 2600, 2: 1400, 4: 650, 8: 200 };
 const EV = {
   goal: { icon: 'football', color: C.accent },
   yellow: { icon: 'square', color: '#FFD23F' },
@@ -45,30 +47,77 @@ export default function MatchScreen() {
   const [showPitch, setShowPitch] = useState(true);
   const { width: winW } = useWindowDimensions();
   const finalized = useRef(false);
+  const [seq, setSeq] = useState({ id: 0, steps: [] });
+  const prevBall = useRef(null);
+  const [shown, setShown] = useState(1); // сколько событий ленты уже «случилось» на экране
+  const [disp, setDisp] = useState([0, 0]); // счёт на табло (обновляется, когда мяч долетел)
+  const reveal = useRef(null);
 
   const me = um ? (isUserTeam(W, um.m.h) ? 0 : 1) : 0;
 
+  const showAll = () => {
+    const s = S.current;
+    if (!s) return;
+    if (reveal.current) clearTimeout(reveal.current);
+    setShown(s.ev.length);
+    setDisp([...s.score]);
+  };
+
   useEffect(() => {
     if (!running) return undefined;
-    const t = setInterval(() => {
+    let timer = null;
+    let alive = true;
+    const ms = SPEEDS[speed];
+    const tick = () => {
+      if (!alive) return;
       const s = S.current;
       if (!s) return;
       const before = s.ev.length;
       stepMinute(W, s);
       const newEv = s.ev.slice(before);
-      if (newEv.some((e) => e.type === 'goal')) thud();
+      // розыгрыш для поля
+      let steps = [];
+      try {
+        steps = buildSequence(W, s, prevBall.current);
+      } catch (err) {
+        steps = [];
+      }
+      if (steps.length) {
+        const last = steps[steps.length - 1];
+        prevBall.current = { x: last.x, y: last.y, side: last.side, slot: last.slot };
+        if (['goal', 'save', 'miss', 'post', 'var'].includes(last.kind)) prevBall.current = { x: 0.5, y: 0.5, side: last.kind === 'save' ? last.side : 1 - (s.ball?.side ?? 0), slot: -1 };
+      }
+      setSeq((q) => ({ id: q.id + 1, steps }));
+      // лента и табло догоняют мяч к концу розыгрыша
+      if (reveal.current) clearTimeout(reveal.current);
+      const delay = showPitch && ms >= 450 ? ms * 0.85 : 0;
+      reveal.current = setTimeout(() => {
+        setShown(s.ev.length);
+        setDisp([...s.score]);
+        if (newEv.some((e) => e.type === 'goal')) thud();
+      }, delay);
+      let stop = false;
       if (s.htPause) {
         s.htPause = false;
-        setRunning(false);
+        stop = true;
       }
-      if (newEv.some((e) => e.side === me && (e.type === 'inj' || e.type === 'red')) && W.user.autoSubs === false) setRunning(false);
+      if (newEv.some((e) => e.side === me && (e.type === 'inj' || e.type === 'red')) && W.user.autoSubs === false) stop = true;
       if (s.done) {
-        setRunning(false);
-        finish();
+        stop = true;
+        setTimeout(() => { showAll(); finish(); }, delay + 300);
       }
       setN((n) => n + 1);
-    }, SPEEDS[speed]);
-    return () => clearInterval(t);
+      if (stop) {
+        setTimeout(() => setRunning(false), delay);
+        return;
+      }
+      timer = setTimeout(tick, ms);
+    };
+    timer = setTimeout(tick, 60);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
   }, [running, speed]);
 
   if (!um) {
@@ -102,6 +151,8 @@ export default function MatchScreen() {
     setPhase('live');
     if (quick) {
       simulateFull(W, S.current);
+      setShown(S.current.ev.length);
+      setDisp([...S.current.score]);
       finish();
     } else setRunning(true);
   };
@@ -183,7 +234,10 @@ export default function MatchScreen() {
   const side = me === 0 ? s.h : s.a;
   const totalPoss = s.poss[0] + s.poss[1] || 1;
   const pct0 = Math.round((s.poss[0] / totalPoss) * 100);
-  const scorers = (si) => s.goals.filter((g) => g[1] === si).map((g) => `${(W.players[g[2]]?.n || '').split(' ').slice(-1)[0]}${g[4] === 'pen' ? ' (п)' : g[4] === 'og' ? ' (авт)' : ''} ${g[0]}'`);
+  const live = phase === 'live';
+  const score = live ? disp : s.score;
+  const goalsShown = live ? s.goals.slice(0, disp[0] + disp[1]) : s.goals;
+  const scorers = (si) => goalsShown.filter((g) => g[1] === si).map((g) => `${(W.players[g[2]]?.n || '').split(' ').slice(-1)[0]}${g[4] === 'pen' ? ' (п)' : g[4] === 'og' ? ' (авт)' : ''} ${g[0]}'`);
   const minute = s.done ? 'FT' : s.min === 0 ? "0'" : `${clockLabel(s)}'`;
 
   const header = (
@@ -201,9 +255,9 @@ export default function MatchScreen() {
           </View>
           <View style={{ alignItems: 'center', minWidth: 124 }}>
             <View style={st.scoreBox}>
-              <Text style={st.scoreNum}>{s.score[0]}</Text>
+              <Text style={st.scoreNum}>{score[0]}</Text>
               <Text style={st.scoreSep}>:</Text>
-              <Text style={st.scoreNum}>{s.score[1]}</Text>
+              <Text style={st.scoreNum}>{score[1]}</Text>
             </View>
             {s.pens ? <T size={12} muted style={{ marginTop: 2 }}>пен. {s.pens[0]}:{s.pens[1]}</T> : null}
             <View style={[st.minute, s.done && { backgroundColor: C.card3 }, running && { backgroundColor: C.accent }]}>
@@ -216,7 +270,7 @@ export default function MatchScreen() {
             <Text style={[st.bugName, me === 1 && { color: C.gold }]} numberOfLines={2}>{s.a.name}</Text>
           </View>
         </View>
-        {s.goals.length ? (
+        {goalsShown.length ? (
           <View style={{ flexDirection: 'row', marginTop: 8, gap: 16 }}>
             <View style={{ flex: 1, alignItems: 'flex-end' }}>{scorers(0).map((x, i) => <T key={i} size={11} muted>{x} ⚽</T>)}</View>
             <View style={{ flex: 1 }}>{scorers(1).map((x, i) => <T key={i} size={11} muted>⚽ {x}</T>)}</View>
@@ -296,7 +350,7 @@ export default function MatchScreen() {
       {header}
       {showPitch && !panel ? (
         <View style={{ paddingTop: 10, paddingHorizontal: 14 }}>
-          <MatchPitch S={s} me={me} tickMs={SPEEDS[speed]} width={Math.min(winW - 28, 520)} />
+          <MatchPitch W={W} S={s} me={me} seq={seq.steps} seqId={seq.id} minuteMs={SPEEDS[speed]} width={Math.min(winW - 28, 520)} />
         </View>
       ) : null}
       {panel === 'tactic' ? (
@@ -344,8 +398,8 @@ export default function MatchScreen() {
         </View>
       ) : null}
       <FlatList
-        data={s.ev.slice(-80).reverse()}
-        keyExtractor={(_, i) => String(s.ev.length - i)}
+        data={s.ev.slice(0, Math.max(1, shown)).slice(-80).reverse()}
+        keyExtractor={(_, i) => String(Math.max(1, shown) - i)}
         contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 8, paddingBottom: 110 }}
         renderItem={({ item }) => {
           const ev = EV[item.type] || EV.info;
@@ -367,11 +421,11 @@ export default function MatchScreen() {
         <Pressable onPress={() => { tap(); setPanel(null); setRunning(!running); }} style={[st.play, s.done && { opacity: 0.4 }]} disabled={s.done}>
           <Icon name={running ? 'pause' : 'play'} size={26} color="#1A1206" />
         </Pressable>
-        <CtrlBtn icon="speedometer" label={`x${speed}`} onPress={() => setSpeed(speed === 1 ? 2 : speed === 2 ? 4 : 1)} />
+        <CtrlBtn icon="speedometer" label={`x${speed}`} onPress={() => setSpeed(speed === 1 ? 2 : speed === 2 ? 4 : speed === 4 ? 8 : 1)} />
         <CtrlBtn icon={showPitch ? 'list' : 'football-outline'} label={showPitch ? 'Лента' : 'Поле'} active={false} onPress={() => setShowPitch(!showPitch)} />
         <CtrlBtn icon="swap-vertical" label={`Замены ${side.subsLeft}`} active={panel === 'subs'} onPress={() => { setRunning(false); setPanel(panel === 'subs' ? null : 'subs'); setSubOut(null); }} />
         <CtrlBtn icon="options" label="Тактика" active={panel === 'tactic'} onPress={() => { setRunning(false); setPanel(panel === 'tactic' ? null : 'tactic'); }} />
-        <CtrlBtn icon="play-skip-forward" label="До конца" onPress={() => { setRunning(false); simulateFull(W, s); finish(); setN((n) => n + 1); }} />
+        <CtrlBtn icon="play-skip-forward" label="До конца" onPress={() => { setRunning(false); simulateFull(W, s); showAll(); finish(); setN((n) => n + 1); }} />
       </View>
     </View>
   );
