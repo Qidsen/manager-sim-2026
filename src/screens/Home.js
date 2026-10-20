@@ -15,7 +15,7 @@ import { bcStart, bcEnd, logError } from '../diag';
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Время идёт порциями по несколько дней, чтобы экран не замирал
-export async function continueGame(G) {
+export async function continueGame(G, limit = 400) {
   thud();
   const W = G.W;
   const u = W.user;
@@ -26,9 +26,10 @@ export async function continueGame(G) {
   const t0 = Date.now();
   await bcStart(W, 'continue');
   try {
-    while (days < 400) {
-      r = advance(W, 3);
-      days += 3;
+    while (days < limit) {
+      const step = Math.min(3, limit - days);
+      r = advance(W, step);
+      days += step;
       if (r.kind !== 'idle') break;
       if (!u.club && !u.nation) break;
       G.setBusy(`Идёт время… ${fmtShort(W.year, W.day)}`);
@@ -62,6 +63,8 @@ export async function continueGame(G) {
     }
   } else if (!u.club && !u.nation) G.push('career');
 }
+
+const STEPS = [[1, '1 день'], [3, '3 дня'], [7, 'Неделя'], [400, 'До матча']];
 
 export default function HomeScreen() {
   const G = useG();
@@ -256,7 +259,23 @@ export default function HomeScreen() {
       </ScrollView>
 
       <View style={s.cta}>
-        <Btn title={today ? 'К МАТЧУ' : 'ПРОДОЛЖИТЬ'} icon={today ? 'football' : 'play'} onPress={() => (today ? G.push('match') : continueGame(G))} />
+        {!today ? (
+          <View style={s.steps}>
+            {STEPS.map(([d, l]) => {
+              const on = (u.step || 400) === d;
+              return (
+                <Pressable key={d} onPress={() => { tap(); u.step = d; G.refresh(); }} style={[s.stepChip, on && s.stepOn]}>
+                  <Text style={[s.stepT, on && { color: '#1A1206' }]}>{l}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+        <Btn
+          title={today ? 'К МАТЧУ' : (u.step || 400) >= 400 ? 'ПРОДОЛЖИТЬ' : `ПРОДОЛЖИТЬ · ${STEPS.find((x) => x[0] === u.step)?.[1].toUpperCase()}`}
+          icon={today ? 'football' : 'play'}
+          onPress={() => (today ? G.push('match') : continueGame(G, u.step || 400))}
+        />
       </View>
     </View>
   );
@@ -289,6 +308,10 @@ function TeamBlock({ W, id, me }) {
 }
 
 const s = StyleSheet.create({
+  steps: { flexDirection: 'row', gap: 6, marginBottom: 8 },
+  stepChip: { flex: 1, alignItems: 'center', paddingVertical: 7, borderRadius: 10, backgroundColor: C.card2, borderWidth: 1, borderColor: C.line },
+  stepOn: { backgroundColor: C.gold, borderColor: C.gold },
+  stepT: { color: C.text, fontSize: 12, fontWeight: '700' },
   alert: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.card, borderRadius: 16, padding: 14, borderWidth: 1, marginBottom: 10 },
   hero: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 22 },
   date: { color: C.muted, fontSize: 12, fontFamily: F.d7, letterSpacing: 1.3 },
