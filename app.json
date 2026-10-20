@@ -23,6 +23,15 @@
     },
     "runtimeVersion": {
       "policy": "sdkVersion"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "a95c2a92-dc87-4594-9196-4ef411377808"
+      }
+    },
+    "owner": "qidsen-studio",
+    "updates": {
+      "url": "https://u.expo.dev/a95c2a92-dc87-4594-9196-4ef411377808"
     }
   }
 }
