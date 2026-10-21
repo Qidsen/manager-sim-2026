@@ -290,7 +290,7 @@ export default function MatchPitch({ W, S, me, seq, seqId, minuteMs, width, hId,
         </Animated.View>
       </View>
       <View style={st.capRow}>
-        <View style={[st.capDot, { backgroundColor: holder >= 0 ? (holder < 11 ? homeCol : awayCol) : C.dim }]} />
+        <View style={[st.capDot, { backgroundColor: holder >= 0 ? (holder < 11 ? kits.h[0] : kits.a[0]) : C.dim }]} />
         <Text style={st.cap} numberOfLines={1}>{caption || ' '}</Text>
       </View>
     </View>
