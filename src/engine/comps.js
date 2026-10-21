@@ -250,7 +250,7 @@ function finishComp(W, comp) {
   if (last.t === 'ko') winner = last.ties[0]?.w;
   else winner = sortRows(last.groups[0].rows, W)[0]?.id;
   comp.winner = winner;
-  if (comp.kind === 'friendly') return;
+  if (comp.kind === 'friendly' || comp.noHist) return;
   const key = comp.hist || comp.id;
   (W.history[key] ||= []).push({ y: W.year, w: winner, name: comp.name });
   if (winner && comp.prizes?.champ && !isNat(winner)) payPrize(W, winner, comp.prizes.champ);
@@ -489,18 +489,8 @@ export function buildInternational(W) {
     qualComp(W, 'AFQ', `Отбор Кубка Африки ${F}`, caf, [4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3], 24, 2, 'AFCON');
     W.intlPlan.push({ id: 'AFCON', name: `Кубок Африки ${F}`, size: 24, from: 'AFQ' });
     W.intlPlan.push({ id: 'GOLD', name: `Золотой кубок ${F}`, size: 16, direct: confNations(W, 'CONCACAF').slice(0, 16) });
-    // Лига наций УЕФА
-    const uefa = confNations(W, 'UEFA');
-    const groups = [];
-    let i = 0;
-    const sizes = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5];
-    for (const s of sizes) { groups.push(uefa.slice(i, i + s).map(nid)); i += s; }
-    const st = rrStage('Лига наций', groups, 2, INTL_DAYS.slice(0, 10), null);
-    const letters = ['A', 'A', 'A', 'A', 'B', 'B', 'B', 'B', 'C', 'C', 'C', 'D', 'D'];
-    st.groupNames = groups.map((_, gi) => `Лига ${letters[gi]}, группа ${gi + 1}`);
-    const comp = { id: 'UNL', name: `Лига наций УЕФА ${W.year}/${String(F % 100).padStart(2, '0')}`, kind: 'league', scope: 'nat', stages: [st], plan: [{}], cur: 0, teams: uefa.map(nid), hist: 'UNL', multiWinner: true };
-    W.comps.UNL = comp;
-    addSchedule(W, 'UNL', 0, st);
+    // Лига наций УЕФА: четыре отдельные лиги с повышением и вылетом
+    buildNationsLeague(W, F);
   }
 }
 
@@ -508,7 +498,7 @@ export function buildInternational(W) {
 export function buildFinals(W) {
   // Финал четырёх Лиги наций: победители групп лиги A
   const unl = W.comps.UNL;
-  if (unl && !W.comps.UNLF) {
+  if (unl && !W.comps.UNLF && !W.comps['UNL-A']) {
     const st0 = unl.stages[0];
     const win = st0.groups.slice(0, 4).map((g) => sortRows(g.rows, W)[0]?.id).filter(Boolean);
     if (win.length === 4) {
@@ -636,4 +626,128 @@ export function repairKnockouts(W) {
     }
   }
   return fixed;
+}
+
+// ================= Лига наций УЕФА =================
+// Лиги A (16), B (16), C (16), D (остальные). Группы по 4, два круга осенью.
+// A: 1–2 места — 1/4 финала (март) → Финал четырёх (июнь); 3-е — стыки с B; 4-е — вылет в B.
+// B: 1-е — в A; 2-е — стыки с A; 3-е — стыки с C; 4-е — вылет в C.
+// C: 1-е — в B; 2-е — стыки с B; худшие 4-е — вылет в D. D: победители групп — в C.
+export const UNL_TIERS = ['A', 'B', 'C', 'D'];
+
+export function unlTiers(W) {
+  const uefa = confNations(W, 'UEFA');
+  if (!W.unlTier) {
+    W.unlTier = {};
+    uefa.forEach((c, i) => { W.unlTier[c] = i < 16 ? 'A' : i < 32 ? 'B' : i < 48 ? 'C' : 'D'; });
+  }
+  const out = { A: [], B: [], C: [], D: [] };
+  for (const c of uefa) out[W.unlTier[c] || 'D'].push(c);
+  return out;
+}
+
+function buildNationsLeague(W, F) {
+  const tiers = unlTiers(W);
+  const season = `${W.year}/${String(F % 100).padStart(2, '0')}`;
+  for (const L of UNL_TIERS) {
+    const codes = tiers[L];
+    if (codes.length < 3) continue;
+    const nG = codes.length >= 16 ? 4 : Math.max(1, Math.floor(codes.length / 3));
+    const sorted = codes.map(nid).sort((a, b) => teamRep(W, b) - teamRep(W, a));
+    const groups = potGroups(sorted, nG);
+    const st = rrStage(`Лига ${L}`, groups, 2, INTL_DAYS.slice(0, 6), L === 'A' ? { type: 'groups', n: 8 } : null);
+    st.groupNames = groups.map((_, gi) => `Группа ${L}${gi + 1}`);
+    const plan = L === 'A'
+      ? [{}, { name: '1/4 финала', legs: 2, dates: [INTL_DAYS[6], INTL_DAYS[7]] }, { name: '1/2 финала', legs: 1, dates: [SUMMER_DAYS[2]], neutral: true }, { name: 'Финал', legs: 1, dates: [SUMMER_DAYS[5]], neutral: true }]
+      : [{}];
+    const id = `UNL-${L}`;
+    W.comps[id] = {
+      id, name: `Лига наций · Лига ${L} ${season}`, kind: L === 'A' ? 'cup' : 'league', scope: 'nat', stages: [st], plan, cur: 0,
+      teams: sorted, hist: L === 'A' ? 'UNL' : null, noHist: L !== 'A', unl: L,
+    };
+    addSchedule(W, id, 0, st);
+  }
+}
+
+const groupPos = (W, comp, pos) => comp.stages[0].groups.map((g) => sortRows(g.rows, W)[pos]).filter(Boolean);
+const bestFirst = (rows) => rows.slice().sort((x, y) => y.pts - x.pts || y.gf - y.ga - (x.gf - x.ga) || y.gf - x.gf);
+
+// Стыки за место в лиге — создаются, когда сыграны группы
+export function unlTick(W) {
+  const A = W.comps['UNL-A'];
+  const B = W.comps['UNL-B'];
+  const Cc = W.comps['UNL-C'];
+  if (!A || !B || W.comps['UNL-PO1']) return;
+  const done = (c) => c && c.stages[0].rounds.every((r) => r.every((m) => m.hg !== null));
+  if (!done(A) || !done(B) || (Cc && !done(Cc))) return;
+  const mk = (id, name, upper, lower, tag) => {
+    const hi = bestFirst(upper).map((r) => r.id);
+    const lo = bestFirst(lower).map((r) => r.id);
+    const n = Math.min(hi.length, lo.length);
+    if (!n) return;
+    const pairs = [];
+    for (let i = 0; i < n; i++) pairs.push([hi[i], lo[n - 1 - i]]);
+    const dates = [Math.max(INTL_DAYS[6], W.day + 1), Math.max(INTL_DAYS[7], W.day + 4)];
+    const st = koStage(name, pairs, 2, dates);
+    W.comps[id] = { id, name: `Лига наций · ${name}`, kind: 'cup', scope: 'nat', stages: [st], plan: [{ name }], cur: 0, teams: pairs.flat(), noHist: true, unlPO: tag };
+    addSchedule(W, id, 0, st);
+  };
+  mk('UNL-PO1', 'Стыки A/B', groupPos(W, A, 2), groupPos(W, B, 1), 'AB');
+  if (Cc) mk('UNL-PO2', 'Стыки B/C', groupPos(W, B, 2), groupPos(W, Cc, 1), 'BC');
+}
+
+// Итоги розыгрыша: кто поднялся, кто опустился (вызывается в конце сезона)
+export function applyUnlMoves(W) {
+  if (!W.comps['UNL-A']) return null;
+  unlTiers(W);
+  const moves = [];
+  const mv = (id, to, why) => {
+    const code = id.slice(2);
+    const from = W.unlTier[code];
+    if (!from || from === to) return;
+    moves.push({ code, from, to, why });
+  };
+  const C = (L) => W.comps[`UNL-${L}`];
+  if (C('A')) groupPos(W, C('A'), 3).forEach((r) => mv(r.id, 'B', 'последнее место в группе'));
+  if (C('B')) {
+    groupPos(W, C('B'), 0).forEach((r) => mv(r.id, 'A', 'победа в группе'));
+    groupPos(W, C('B'), 3).forEach((r) => mv(r.id, 'C', 'последнее место в группе'));
+  }
+  const nD = C('D') ? C('D').stages[0].groups.length : 0;
+  if (C('C')) {
+    groupPos(W, C('C'), 0).forEach((r) => mv(r.id, 'B', 'победа в группе'));
+    const lasts = C('C').stages[0].groups.map((g) => { const rows = sortRows(g.rows, W); return rows[rows.length - 1]; });
+    bestFirst(lasts).reverse().slice(0, nD).forEach((r) => mv(r.id, 'D', 'худшее последнее место'));
+  }
+  if (C('D')) groupPos(W, C('D'), 0).forEach((r) => mv(r.id, 'C', 'победа в группе'));
+  for (const [id, hiT, loT] of [['UNL-PO1', 'A', 'B'], ['UNL-PO2', 'B', 'C']]) {
+    const po = W.comps[id];
+    if (!po) continue;
+    for (const t of po.stages[0].ties) {
+      if (!t.w) continue;
+      if (t.w === t.b) { mv(t.b, hiT, `стыки: победа над ${teamName(W, t.a)}`); mv(t.a, loT, `стыки: поражение от ${teamName(W, t.b)}`); }
+    }
+  }
+  for (const m of moves) W.unlTier[m.code] = m.to;
+  W.unlLast = { y: W.year, moves };
+  return moves;
+}
+
+// Зоны таблицы Лиги наций
+export function unlZone(L, i, n) {
+  const G = '#2BD67B';
+  const O = '#FF9F43';
+  const Y = '#FFD23F';
+  const R = '#FF5A6A';
+  if (L === 'A') return i <= 1 ? G : i === 2 ? O : R;
+  if (L === 'B') return i === 0 ? G : i === 1 ? O : i === 2 ? Y : R;
+  if (L === 'C') return i === 0 ? G : i === 1 ? Y : i === n - 1 ? R : null;
+  if (L === 'D') return i === 0 ? G : null;
+  return null;
+}
+export function unlLegend(L) {
+  if (L === 'A') return [['#2BD67B', '1/4 финала'], ['#FF9F43', 'стыки за место в A'], ['#FF5A6A', 'вылет в B']];
+  if (L === 'B') return [['#2BD67B', 'повышение в A'], ['#FF9F43', 'стыки за выход в A'], ['#FFD23F', 'стыки за место в B'], ['#FF5A6A', 'вылет в C']];
+  if (L === 'C') return [['#2BD67B', 'повышение в B'], ['#FFD23F', 'стыки за выход в B'], ['#FF5A6A', 'возможный вылет в D (2 худших)']];
+  return [['#2BD67B', 'повышение в C']];
 }

@@ -61,6 +61,8 @@ export const ESPN_IDS = {
   'Austin FC': 20906, 'Real Salt Lake': 4771, 'Houston Dynamo': 6077, 'Chicago Fire': 182, 'FC Dallas': 185, 'Colorado Rapids': 184,
   'New England Revolution': 189, 'CF Montréal': 9720, 'D.C. United': 193,
   // Саудовская Аравия
+  Antalyaspor: 3794, Kayserispor: 3643, 'Fatih Karagümrük': 20736, 'Godoy Cruz': 6756,
+  'New York Red Bulls': 190, 'San Jose Earthquakes': 191, 'Sporting KC': 186, 'Toronto FC': 7318, 'St. Louis City': 21812,
   'Al-Hilal': 929, 'Al-Nassr': 817, 'Al-Ittihad': 2276, 'Al-Ahli': 8346, 'Al-Qadsiah': 22022, 'Al-Ettifaq': 8363, 'Al-Taawoun': 18459,
   'Al-Shabab': 793, 'Al-Fateh': 13033, 'Al-Khaleej': 21829, 'Al-Fayha': 21827, 'Al-Riyadh': 21965, 'Al-Kholood': 22028, 'Al-Hazem': 21964, 'NEOM SC': 130899,
   // Еврокубки и остальной мир
@@ -77,6 +79,24 @@ export const ESPN_IDS = {
   'Chengdu Rongcheng': 21355, 'Al-Sadd': 7135, 'Al-Duhail': 12008, 'Al-Gharafa': 7129, 'Shabab Al-Ahli': 790, 'Al-Wahda': 7134,
   'Buriram United': 7138, 'Al-Shorta': 9655, 'Club América': 227, Monterrey: 220, 'Tigres UANL': 232, 'Cruz Azul': 218, Toluca: 223,
   Guadalajara: 219, Pachuca: 234, 'Club León': 228, Alajuelense: 2057, 'Olimpia (HON)': 884, 'Real España': 7245, 'Forge FC': 20026,
+};
+
+
+// Эмблемы, которых нет в ESPN: прямые ссылки (TheSportsDB / FotMob)
+const TSDB = (k) => `https://r2.thesportsdb.com/images/media/team/badge/${k}.png/small`;
+const FOTMOB = (id) => `https://images.fotmob.com/image_resources/logo/teamlogo/${id}.png`;
+export const LOGO_URLS = {
+  'Полісся': TSDB('6r8o5l1725171180'), 'Кривбас': TSDB('2e11ks1681107496'), 'Карпати': TSDB('rsptsu1447696881'),
+  'Зоря': TSDB('pvppfe1785305666'), 'Верес': TSDB('i0gdag1791992866'), 'Оболонь': TSDB('kp9xq81751734322'),
+  'Колос': TSDB('42hl731573324390'), 'Кудрівка': TSDB('2cijmk1724176898'), 'Епіцентр': TSDB('abxdfe1724215373'),
+  'Олександрія': TSDB('wrxkb41603126932'), 'Рух': TSDB('0erwxi1597533225'), 'Металіст 1925': FOTMOB(949030),
+  'СК Полтава': FOTMOB(1395689),
+  Partizan: TSDB('xe41k11781157208'), APOEL: TSDB('j5m0pu1779579095'),
+  AVS: FOTMOB(1889), 'CD Tondela': FOTMOB(188163), 'FCV Dender': FOTMOB(7947), 'San Martín SJ': FOTMOB(89395),
+  'Al-Okhdood': FOTMOB(582759), Damac: FOTMOB(582823), 'Al-Najma': FOTMOB(1523707), Olimpia: FOTMOB(6619),
+  'Alianza Lima': FOTMOB(6398), 'The Strongest': FOTMOB(2527), 'Caracas FC': FOTMOB(7850), 'Jeonbuk Motors': FOTMOB(46038),
+  'Pohang Steelers': FOTMOB(109373), 'Al-Ain': FOTMOB(102117), Persepolis: FOTMOB(101610), Esteghlal: FOTMOB(101614),
+  Pakhtakor: FOTMOB(102141), Saprissa: FOTMOB(6607), Municipal: FOTMOB(9933), 'Plaza Amador': FOTMOB(165476), Cavalier: FOTMOB(5806),
 };
 
 // Лиги ESPN, где игра сама ищет недостающие эмблемы (по названию)

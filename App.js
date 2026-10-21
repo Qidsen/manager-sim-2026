@@ -6,7 +6,7 @@ import { Ctx } from './src/ui/ctx';
 import { C, F, Btn, Icon, tap } from './src/ui/kit';
 import { useFonts } from 'expo-font';
 import { repairSchedule } from './src/engine/sim';
-import { registerCustomFormations } from './src/engine/util';
+import { registerCustomFormations, latinName, hasCyrillic } from './src/engine/util';
 import { loadLogos, discoverLogos } from './src/logos';
 import { makeObjectives } from './src/engine/board';
 import { logError } from './src/diag';
@@ -157,6 +157,8 @@ export default function App() {
         }
         seed(world.rng || 1);
         registerCustomFormations(world);
+        // единое написание имён игроков (латиница)
+        for (const id in world.players) { const p = world.players[id]; if (hasCyrillic(p.n)) p.n = latinName(p.n, p.nat); }
         try { if (world.user?.club && !world.user.objs?.length) makeObjectives(world); } catch (e) { console.warn(e); }
         setTimeout(() => discoverLogos(world), 4000);
         try {

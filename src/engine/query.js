@@ -98,6 +98,7 @@ export function compGroups(comp) {
   if (comp.scope === 'club' && comp.id.startsWith('CUP')) return 'Национальные кубки';
   if (comp.scope === 'club') return 'Международные клубные';
   if (comp.kind === 'friendly') return 'Товарищеские';
+  if (comp.unl || comp.unlPO || comp.id === 'UNL' || comp.id === 'UNLF') return 'Лига наций УЕФА';
   return 'Сборные';
 }
 

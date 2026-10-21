@@ -8,7 +8,7 @@ import { userMatchToday, prepareMatch, finalizeMatch } from '../engine/sim';
 import { stepMinute, simulateFull, doSub, resolveLineup, clockLabel } from '../engine/match';
 import MatchPitch from '../ui/MatchPitch';
 import { buildSequence } from '../engine/playbyplay';
-import { teamName, teamFlag, teamColor, teamPool, teamTactic, isUserTeam } from '../engine/teams';
+import { teamName, teamFlag, teamColor, teamPool, teamTactic, isUserTeam, matchKits } from '../engine/teams';
 import { FORMATIONS, MENTALITY, POS_RU, slotRating, fmtDate } from '../engine/util';
 import { PosBadge } from '../ui/playerRow';
 import { lastResults, resultLetter } from '../engine/query';
@@ -245,8 +245,8 @@ export default function MatchScreen() {
   const header = (
     <LinearGradient colors={['#141E33', C.bg]} style={{ borderBottomWidth: 1, borderBottomColor: C.line }}>
       <View style={{ flexDirection: 'row', height: 3 }}>
-        <View style={{ flex: 1, backgroundColor: me === 0 ? C.gold : teamColor(W, m.h) }} />
-        <View style={{ flex: 1, backgroundColor: me === 1 ? C.gold : teamColor(W, m.a) }} />
+        <View style={{ flex: 1, backgroundColor: matchKits(W, m.h, m.a).h[0] }} />
+        <View style={{ flex: 1, backgroundColor: matchKits(W, m.h, m.a).a[0] }} />
       </View>
       <View style={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: 12 }}>
         <Text style={[st.kicker2, { textAlign: 'center' }]} numberOfLines={1}>{title.toUpperCase()}</Text>
@@ -346,7 +346,7 @@ export default function MatchScreen() {
       {header}
       {showPitch && !panel ? (
         <View style={{ paddingTop: 10, paddingHorizontal: 14 }}>
-          <MatchPitch W={W} S={s} me={me} seq={seq.steps} seqId={seq.id} minuteMs={SPEEDS[speed]} width={Math.min(winW - 28, 520)} />
+          <MatchPitch W={W} S={s} me={me} hId={m.h} aId={m.a} seq={seq.steps} seqId={seq.id} minuteMs={SPEEDS[speed]} width={Math.min(winW - 28, 520)} />
         </View>
       ) : null}
       {panel === 'tactic' ? (

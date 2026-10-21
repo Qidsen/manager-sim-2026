@@ -5,6 +5,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { View, Text, Animated, Easing, StyleSheet } from 'react-native';
 import { C, F } from './kit';
 import { teamShape } from '../engine/playbyplay';
+import { matchKits, isLight, cdist } from '../engine/teams';
 
 const DOT = 16;
 const BALL = 9;
@@ -123,7 +124,7 @@ function buildPlan(S, steps, prev) {
   return { grid, times, players, ball: { xs: bx, ys: by, lift }, end };
 }
 
-export default function MatchPitch({ W, S, me, seq, seqId, minuteMs, width }) {
+export default function MatchPitch({ W, S, me, seq, seqId, minuteMs, width, hId, aId }) {
   const h = Math.round(width * 0.62);
   const t = useRef(new Animated.Value(0)).current;
   const flash = useRef(new Animated.Value(0)).current;
@@ -223,9 +224,14 @@ export default function MatchPitch({ W, S, me, seq, seqId, minuteMs, width }) {
     };
   }, [plan, width]);
 
-  const homeCol = me === 0 ? C.gold : '#4C8DFF';
-  const awayCol = me === 1 ? C.gold : '#4C8DFF';
-  const awayAlt = me === 1 ? C.gold : '#E8EDF7';
+  const kits = useMemo(() => (hId && aId ? matchKits(W, hId, aId) : { h: ['#4C8DFF', '#FFFFFF'], a: ['#E8EDF7', '#111111'] }), [hId, aId]);
+  const gkCols = useMemo(() => {
+    const opts = ['#1EC27A', '#FF8A3D', '#B44CFF', '#FFE14C', '#3DD9FF'];
+    const far = (c) => opts.filter((o) => ![kits.h[0], kits.a[0], c].some((k) => k && cdist(k, o) < 80));
+    const g1 = far(null)[0] || '#1EC27A';
+    const g2 = far(g1).find((o) => o !== g1) || '#FF8A3D';
+    return [g1, g2];
+  }, [kits]);
   const lastGoal = S.goals[S.goals.length - 1];
   const start = state.current;
 
@@ -253,12 +259,14 @@ export default function MatchPitch({ W, S, me, seq, seqId, minuteMs, width }) {
           const side = si === 0 ? S.h : S.a;
           if (!side.xi[i % 11]) return null;
           const isGk = i % 11 === 0;
-          const col = si === 0 ? homeCol : me === 1 ? awayCol : awayAlt;
+          const kit = si === 0 ? kits.h : kits.a;
+          const col = isGk ? gkCols[si] : kit[0];
+          const num = isGk ? (isLight(col) ? '#111' : '#fff') : kit[1];
           const hold = i === holder;
           const pos = dots ? { transform: [{ translateX: dots[i].x }, { translateY: dots[i].y }] } : { transform: [{ translateX: start.players[i].x * width - DOT / 2 }, { translateY: start.players[i].y * h - DOT / 2 }] };
           return (
-            <Animated.View key={i} style={[st.dot, pos, { backgroundColor: isGk ? (si === 0 ? '#1EC27A' : '#FF8A3D') : col, borderColor: hold ? '#fff' : 'rgba(0,0,0,0.55)', borderWidth: hold ? 2.5 : 1.2 }]}>
-              <Text style={[st.num, { color: col === '#E8EDF7' || col === C.gold ? '#111' : '#fff' }]}>{(i % 11) + 1}</Text>
+            <Animated.View key={i} style={[st.dot, pos, { backgroundColor: col, borderColor: hold ? C.gold : si === me ? kit[1] : 'rgba(0,0,0,0.55)', borderWidth: hold ? 2.5 : 1.4 }]}>
+              <Text style={[st.num, { color: num === col ? (isLight(col) ? '#111' : '#fff') : num }]}>{(i % 11) + 1}</Text>
             </Animated.View>
           );
         })}

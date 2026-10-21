@@ -5,12 +5,13 @@ import { C, F, T, Seg, Chips, Card, Row, Empty, FormDots, Btn, Icon } from '../u
 import Page from '../ui/page';
 import { useG } from '../ui/ctx';
 import { compGroups, topScorers, scoreText, userTeamIds } from '../engine/query';
+import { unlZone, unlLegend } from '../engine/comps';
 import { sortRows, compStageName } from '../engine/comps';
 import { teamName, teamFlag, isUserTeam } from '../engine/teams';
 import { fmtShort, seasonLabel } from '../engine/util';
 import { LEAGUES } from '../data/leagues';
 
-const ORDER = ['Чемпионаты', 'Национальные кубки', 'Международные клубные', 'Сборные', 'Товарищеские'];
+const ORDER = ['Чемпионаты', 'Национальные кубки', 'Международные клубные', 'Сборные', 'Лига наций УЕФА', 'Товарищеские'];
 
 export function CompsList() {
   const G = useG();
@@ -22,6 +23,7 @@ export function CompsList() {
   for (const c of all) (groups[compGroups(c)] ||= []).push(c);
   const lorder = LEAGUES.map((l) => `L:${l.id}`);
   groups['Чемпионаты']?.sort((a, b) => lorder.indexOf(a.id) - lorder.indexOf(b.id));
+  groups['Лига наций УЕФА']?.sort((a, b) => (a.id < b.id ? -1 : 1));
 
   const item = (c) => {
     const st = c.stages[c.stages.length - 1];
@@ -32,7 +34,7 @@ export function CompsList() {
         </View>
         <View style={{ flex: 1 }}>
           <T bold size={14}>{c.name}</T>
-          <T muted size={12}>{c.done ? `Победитель: ${c.winner ? teamName(W, c.winner) : (c.qualified ? `${c.qualified.length} команд прошли` : '—')}` : st?.name}</T>
+          <T muted size={12}>{c.done ? (c.noHist ? 'Завершено' : `Победитель: ${c.winner ? teamName(W, c.winner) : (c.qualified ? `${c.qualified.length} команд прошли` : '—')}`) : st?.name}</T>
         </View>
         <Icon name="chevron-forward" size={16} color={C.dim} />
       </Row>
@@ -43,7 +45,7 @@ export function CompsList() {
     <>
       {my.length ? <Card title="Ваши турниры" icon="star">{my.map(item)}</Card> : null}
       {ORDER.filter((k) => groups[k]?.length).map((k) => (
-        <Card key={k} title={k} icon={{ 'Чемпионаты': 'list', 'Национальные кубки': 'ribbon', 'Международные клубные': 'globe', 'Сборные': 'flag', 'Товарищеские': 'people' }[k]}>{groups[k].map(item)}</Card>
+        <Card key={k} title={k} icon={{ 'Чемпионаты': 'list', 'Национальные кубки': 'ribbon', 'Международные клубные': 'globe', 'Сборные': 'flag', 'Лига наций УЕФА': 'layers', 'Товарищеские': 'people' }[k]}>{groups[k].map(item)}</Card>
       ))}
     </>
   );
@@ -83,7 +85,8 @@ export function CompScreen({ id }) {
   const W = G.W;
   const comp = W.comps[id];
   return (
-    <Page title={comp ? comp.name : 'Турнир'} sub={comp?.done && comp.winner ? `Победитель: ${teamName(W, comp.winner)}` : comp?.stages[comp.stages.length - 1]?.name} back>
+    <Page title={comp ? comp.name : 'Турнир'} sub={comp?.done && comp.winner && !comp.noHist ? `Победитель: ${teamName(W, comp.winner)}` : comp?.stages[comp.stages.length - 1]?.name} back>
+      {comp?.unl || comp?.unlPO ? <UnlBox W={W} comp={comp} /> : null}
       <CompView id={id} />
     </Page>
   );
@@ -91,8 +94,8 @@ export function CompScreen({ id }) {
 
 function Tables({ W, comp, stage }) {
   const G = useG();
-  const zones = comp.kind === 'league' && comp.lid ? zoneFor(comp.lid) : null;
-  const legend = comp.kind === 'league' && comp.lid ? legendFor(comp.lid) : [];
+  const zones = comp.unl ? (i, n) => unlZone(comp.unl, i, n) : comp.kind === 'league' && comp.lid ? zoneFor(comp.lid) : null;
+  const legend = comp.unl ? unlLegend(comp.unl) : comp.kind === 'league' && comp.lid ? legendFor(comp.lid) : [];
   return (
     <>
       {stage.groups.map((g, gi) => tableCard(g, gi))}
@@ -238,6 +241,69 @@ function Scorers({ W, comp }) {
           <T bold size={16} style={{ width: 30, textAlign: 'right' }}>{x.g}</T>
         </Row>
       ))}
+    </Card>
+  );
+}
+
+// Лига наций: кто поднимается и кто опускается
+function UnlBox({ W, comp }) {
+  const G = useG();
+  const nm = (id) => teamName(W, id);
+  const L = comp.unl;
+  const lines = [];
+  if (L) {
+    const st = comp.stages[0];
+    const started = st.rounds.flat().some((m) => m.hg !== null);
+    const fin = st.rounds.every((r) => r.every((m) => m.hg !== null));
+    if (started) {
+      const pos = (k) => st.groups.map((g) => sortRows(g.rows, W)[k]).filter(Boolean).map((r) => r.id);
+      const last = st.groups.map((g) => { const rows = sortRows(g.rows, W); return rows[rows.length - 1]?.id; }).filter(Boolean);
+      const pre = fin ? '' : 'сейчас: ';
+      if (L === 'A') {
+        lines.push([C.accent, `В 1/4 финала ${pre}`, [...pos(0), ...pos(1)]]);
+        lines.push([C.orange, `Стыки за место в A ${pre}`, pos(2)]);
+        lines.push([C.red, `Вылет в лигу B ${pre}`, last]);
+      } else if (L === 'B') {
+        lines.push([C.accent, `Повышение в A ${pre}`, pos(0)]);
+        lines.push([C.orange, `Стыки за выход в A ${pre}`, pos(1)]);
+        lines.push([C.gold, `Стыки за место в B ${pre}`, pos(2)]);
+        lines.push([C.red, `Вылет в лигу C ${pre}`, last]);
+      } else if (L === 'C') {
+        lines.push([C.accent, `Повышение в B ${pre}`, pos(0)]);
+        lines.push([C.gold, `Стыки за выход в B ${pre}`, pos(1)]);
+        lines.push([C.red, `Под угрозой вылета в D ${pre}`, last]);
+      } else {
+        lines.push([C.accent, `Повышение в C ${pre}`, pos(0)]);
+      }
+    }
+  }
+  if (comp.unlPO) {
+    const [hi, lo] = comp.unlPO === 'AB' ? ['A', 'B'] : ['B', 'C'];
+    for (const t of comp.stages[0].ties) {
+      lines.push([t.w ? (t.w === t.a ? C.muted : C.accent) : C.text, `${nm(t.a)} (${hi}) — ${nm(t.b)} (${lo})`, t.w ? [t.w === t.a ? `${nm(t.a)} остаётся в ${hi}` : `${nm(t.b)} поднимается в ${hi}`] : ['март']]);
+    }
+  }
+  const prev = W.unlLast;
+  const prevMoves = prev && L ? prev.moves.filter((m) => m.to === L || m.from === L) : [];
+  return (
+    <Card title={comp.unlPO ? 'Стыковые матчи за лигу' : `Лига ${L}: повышение и вылет`} icon="swap-vertical">
+      {!lines.length && L ? <T muted size={12}>Группы ещё не стартовали. Победители групп поднимаются в лигу выше, последние места опускаются, 2–3 места играют стыки в марте.</T> : null}
+      {lines.map(([col, label, ids], i) => (
+        <View key={i} style={{ marginBottom: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: col }} />
+            <T size={12} bold color={col}>{label}</T>
+          </View>
+          <T size={13} style={{ marginLeft: 14, marginTop: 2 }}>{ids.map((x) => (typeof x === 'string' && x.startsWith('n:') ? nm(x) : x)).join(', ') || '—'}</T>
+        </View>
+      ))}
+      {prevMoves.length ? (
+        <View style={{ marginTop: 4, paddingTop: 8, borderTopWidth: 0.5, borderTopColor: C.line }}>
+          <T muted size={11} style={{ marginBottom: 4 }}>ПРОШЛЫЙ РОЗЫГРЫШ ({prev.y}/{String((prev.y + 1) % 100).padStart(2, '0')})</T>
+          <T size={12} color={C.accent}>Пришли в лигу {L}: {prevMoves.filter((m) => m.to === L).map((m) => `${nm('n:' + m.code)} (из ${m.from})`).join(', ') || '—'}</T>
+          <T size={12} color={C.red} style={{ marginTop: 2 }}>Ушли: {prevMoves.filter((m) => m.from === L).map((m) => `${nm('n:' + m.code)} (в ${m.to})`).join(', ') || '—'}</T>
+        </View>
+      ) : null}
     </Card>
   );
 }

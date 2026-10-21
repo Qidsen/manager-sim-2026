@@ -215,3 +215,36 @@ export const growthOf = (p) => GROWTH[growthKey(p)];
 export function injuryRisk(p, fit) {
   return (p.frag > 0 ? 2.5 : 1) * ((p.shp ?? 80) < 55 ? 1.5 : 1) * ((fit ?? p.fit) < 60 ? 1.6 : 1);
 }
+
+// ---------- единое написание имён: латиница, как в EA FC ----------
+const UA = { а: 'a', б: 'b', в: 'v', г: 'h', ґ: 'g', д: 'd', е: 'e', є: 'ie', ж: 'zh', з: 'z', и: 'y', і: 'i', ї: 'i', й: 'i', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'kh', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'shch', ь: '', ю: 'iu', я: 'ia', "'": '', '’': '', ʼ: '' };
+const UA_START = { є: 'ye', ї: 'yi', й: 'y', ю: 'yu', я: 'ya' };
+const RU = { а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'yo', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'kh', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'shch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya', і: 'i', ї: 'yi', є: 'ye', ґ: 'g' };
+const CYR = /[А-Яа-яЁёІіЇїЄєҐґ]/;
+export const hasCyrillic = (s) => CYR.test(s || '');
+export function latinName(name, nat) {
+  if (!hasCyrillic(name)) return name;
+  const ua = nat === 'UKR' || /[ІіЇїЄєҐґ]/.test(name);
+  return name
+    .split(/(\s+|-)/)
+    .map((w) => {
+      let out = '';
+      const low = w.toLowerCase();
+      for (let i = 0; i < low.length; i++) {
+        const ch = low[i];
+        let t;
+        if (ua) {
+          if (ch === 'г' && low[i - 1] === 'з') t = 'gh';
+          else t = i === 0 && UA_START[ch] ? UA_START[ch] : UA[ch];
+        } else {
+          t = RU[ch];
+          if (ch === 'е' && (i === 0 || 'аеёиоуыэюяъь'.includes(low[i - 1]))) t = 'ye';
+        }
+        if (t === undefined) t = ch;
+        if (w[i] !== low[i] && t) t = t[0].toUpperCase() + t.slice(1);
+        out += t;
+      }
+      return out;
+    })
+    .join('');
+}

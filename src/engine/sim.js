@@ -4,7 +4,7 @@ import { NATIONS, NATION_BY_CODE } from '../data/nations';
 import { rand, randInt, chance, pick, shuffle, weighted, gauss, getState, seed } from './rng';
 import { recalcOvr, playerValue, wageFor, clamp, POS_WEIGHTS, ATTRS, LINE, money, fmtDate, seasonLabel, POS_FULL, devRole, retrainWeeks, growthOf } from './util';
 import { createMatch, simulateFull, applyResults, winnerSide, quickMatch } from './match';
-import { buildSeason, buildFinals, recordResult, recordFriendly, koContext, sortRows, addFriendly, healComp, relinkTies, repairKnockouts } from './comps';
+import { buildSeason, buildFinals, recordResult, recordFriendly, koContext, sortRows, addFriendly, healComp, relinkTies, repairKnockouts, unlTick, applyUnlMoves } from './comps';
 import { INTL_DAYS, SUMMER_DAYS, isWindow, WINDOWS } from './fixtures';
 import { processDebts, processNegs, processClauses } from './market';
 import { maybePress, onUserResult, checkPromise, weeklyEvents } from './stories';
@@ -308,6 +308,7 @@ export function processDay(W) {
     }
   }
   playDayMatches(W);
+  try { unlTick(W); } catch (err) { logErr(W, 'unl', err); }
   try {
     dailyTick(W);
   } catch (err) {
@@ -1190,6 +1191,18 @@ function rollover(W) {
   // сила сборных дрейфует к реальной глубине состава
   invalidateNatIndex(W);
   W.offers = [];
+  try {
+    const mv = applyUnlMoves(W);
+    if (mv?.length) {
+      const nm = (c) => NATION_BY_CODE[c]?.name || c;
+      const up = mv.filter((x) => x.to < x.from);
+      const down = mv.filter((x) => x.to > x.from);
+      news(W, `Лига наций: в лигу выше поднялись ${up.map((x) => `${nm(x.code)} (${x.from}→${x.to})`).join(', ')}.`);
+      news(W, `Лига наций: опустились ${down.map((x) => `${nm(x.code)} (${x.from}→${x.to})`).join(', ')}.`);
+      const my = u.nation && mv.find((x) => x.code === u.nation);
+      if (my) mail(W, my.to < my.from ? `Сборная поднимается в лигу ${my.to}!` : `Сборная опускается в лигу ${my.to}`, `${nm(my.code)}: лига ${my.from} → лига ${my.to} (${my.why}). Новый розыгрыш Лиги наций — в следующем сезоне.`, { stop: true });
+    }
+  } catch (e) { logErr(W, 'unlMoves', e); }
   const champs = summary.champions.map((c) => `${c.league}: ${c.w}`).join('\n');
   W.year++;
   W.day = 0;

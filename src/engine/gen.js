@@ -4,7 +4,7 @@ import { NATIONS, NATION_BY_CODE } from '../data/nations';
 import { NAME_POOLS, NATION_POOL } from '../data/names';
 import { REAL_SQUADS } from '../data/realSquads';
 import { rand, randInt, gauss, pick, weighted, seed, getState, chance } from './rng';
-import { ATTRS, POS_WEIGHTS, recalcOvr, wageFor, clamp, FORMATION_NAMES } from './util';
+import { ATTRS, POS_WEIGHTS, recalcOvr, wageFor, clamp, FORMATION_NAMES, latinName } from './util';
 
 export const DOMESTIC = {
   ENG1: 0.35, ENG2: 0.6, ESP1: 0.6, ITA1: 0.45, GER1: 0.48, FRA1: 0.55, NED1: 0.55, POR1: 0.42, TUR1: 0.5, UKR1: 0.85,
@@ -45,7 +45,7 @@ export function makePlayer(W, { pos, ovr, age, nat, pot, club = null, name, wage
     else v = ovr - 14 + gauss(0, 7);
     a[k] = Math.round(clamp(v, 10, 99) * 10) / 10;
   }
-  const p = { id, n: name || randomName(nat), nat, age, pos, a, ovr: 0, pot: 0, club, wage: 0, contract: 0, fit: 100, mor: 70, inj: 0, st: newStats(), car: { app: 0, g: 0 }, caps: 0, ng: 0 };
+  const p = { id, n: latinName(name || randomName(nat), nat), nat, age, pos, a, ovr: 0, pot: 0, club, wage: 0, contract: 0, fit: 100, mor: 70, inj: 0, st: newStats(), car: { app: 0, g: 0 }, caps: 0, ng: 0 };
   // подгоняем ключевые атрибуты под целевой рейтинг
   recalcOvr(p);
   for (let it = 0; it < 3; it++) {

@@ -1,6 +1,6 @@
 // Эмблемы клубов: встроенная таблица + эмблемы из файла-патча + автоматический поиск недостающих.
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ESPN_IDS, ESPN_LEAGUES, ALIASES, espnLogo } from './data/logos';
+import { ESPN_IDS, ESPN_LEAGUES, ALIASES, espnLogo, LOGO_URLS } from './data/logos';
 
 const KEY = 'logos_v1';
 const STAMP = 'logos_scan_v1';
@@ -39,7 +39,8 @@ export function clubLogo(club, size = 96) {
   const url = extra[k2] || extra[club.name];
   if (url) return typeof url === 'number' ? espnLogo(url, size) : url;
   const id = ESPN_IDS[k2] ?? ESPN_IDS[club.name];
-  return id ? espnLogo(id, size) : null;
+  if (id) return espnLogo(id, size);
+  return LOGO_URLS[k2] || LOGO_URLS[club.name] || null;
 }
 
 // Эмблемы из файла-патча: { "_logos": { "Клуб": "https://...png" | idESPN } }

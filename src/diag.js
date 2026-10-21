@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 import { teamName } from './engine/teams';
 import { fmtDate, seasonLabel } from './engine/util';
 
-export const APP_VERSION = '2.1';
+export const APP_VERSION = '2.3';
 const BC = 'diag_breadcrumb_v1';
 let lastUnfinished = null;
 
